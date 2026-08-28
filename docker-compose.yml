@@ -1,6 +1,7 @@
 services:
   db:
     image: postgis/postgis:16-3.4
+    platform: linux/amd64
     environment:
       POSTGRES_USER: crm
       POSTGRES_PASSWORD: crm
@@ -24,6 +25,9 @@ services:
       OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org}
       NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
       CORS_ORIGIN: http://localhost:5173
+      DB_SQL_DIR: /database
+    volumes:
+      - ./database:/database:ro
     ports: ["4000:4000"]
     depends_on:
       db: { condition: service_healthy }

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pool } from '../config/db.js';
 
-const dir = path.resolve('../database/migrations');
+const dir = path.resolve(process.env.DB_SQL_DIR || '../database', 'migrations');
 await pool.query(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT now())`);
 const applied = new Set((await pool.query('SELECT name FROM schema_migrations')).rows.map(r => r.name));
 for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort()) {
