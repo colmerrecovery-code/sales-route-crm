@@ -12,7 +12,7 @@ A GPS-enabled Customer Relationship Management (CRM) platform designed for sales
 - **Turn-by-Turn Directions**: Get navigation guidance between customer locations
 
 ### 💼 Customer Database
-- **Customer Tiers**: Organize customers into three buckets:
+- **Customer Tiers**: Organize customers into four buckets:
   - **Tier 1**: Current customers (buy regularly, need quarterly visits/calls)
   - **Tier 2**: Cold/Warm/Hot leads (prospects and drops-ins)
   - **Tier 3**: Inactive customers (haven't purchased in 365+ days)
@@ -34,12 +34,13 @@ A GPS-enabled Customer Relationship Management (CRM) platform designed for sales
 
 ## Tech Stack
 
-- **Frontend**: React.js, Google Maps API, Material-UI
-- **Backend**: Node.js, Express.js
-- **Database**: PostgreSQL with PostGIS (geospatial queries)
-- **Route Optimization**: Google Maps Directions API / OSRM
-- **Authentication**: JWT (JSON Web Tokens)
-- **Deployment**: Docker-ready, AWS/Heroku compatible
+- **Frontend**: React 18 (Vite), React Router, Leaflet / OpenStreetMap tiles
+- **Backend**: Node.js 20, Express 5, zod validation
+- **Database**: PostgreSQL 16 with PostGIS (geospatial queries)
+- **Geocoding**: Nominatim (OpenStreetMap) — swappable for Google Geocoding
+- **Route Optimization & Directions**: OSRM (`/trip` and `/route` endpoints) — swappable for Google Maps Directions API; provider code lives in one file (`backend/services/geo.js`)
+- **Authentication**: JWT (JSON Web Tokens), bcrypt password hashing
+- **Deployment**: Docker Compose (Postgres/PostGIS + API + frontend)
 
 ## Project Structure
 
@@ -73,7 +74,12 @@ sales-route-crm/
 
 ## Getting Started
 
-See [SETUP.md](docs/SETUP.md) for detailed installation and development instructions.
+```bash
+docker compose up --build
+docker compose exec backend npm run db:seed   # demo login: demo@example.com / demo1234
+```
+
+Open http://localhost:5173. See [SETUP.md](docs/SETUP.md) for local development, [API.md](docs/API.md) for endpoints, and [DATABASE.md](docs/DATABASE.md) for the schema.
 
 ## Database Schema Overview
 
@@ -93,7 +99,7 @@ See [SETUP.md](docs/SETUP.md) for detailed installation and development instruct
 
 ## Roadmap
 
-- [ ] v1.0: Core CRM + Basic route planning
+- [x] v1.0: Core CRM + route planning (tiers, contacts, interaction log, map, multi-day trip builder with breaks, turn-by-turn)
 - [ ] v1.1: Advanced route optimization (ML-based)
 - [ ] v1.2: Mobile app (React Native)
 - [ ] v1.3: Integration with calendars & email
