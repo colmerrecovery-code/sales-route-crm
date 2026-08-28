@@ -14,7 +14,6 @@ export default class ErrorBoundary extends Component {
         <p className="muted">The rest of the app still works. Copy the message below and send it to whoever maintains the app.</p>
         <pre className="card" style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{String(this.state.error?.stack || this.state.error)}</pre>
         <a className="btn" href="/">Back to Today</a>
-    open(p,'w').write(s)
       </div>
     );
   }
