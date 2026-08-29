@@ -58,7 +58,7 @@ export const TIERS = {
   tier1: { label: 'Current', short: 'T1', hint: 'Buys regularly · quarterly touch' },
   tier2: { label: 'Lead', short: 'T2', hint: 'Warm or hot prospect' },
   tier3: { label: 'Inactive', short: 'T3', hint: 'No purchase in 365+ days' },
-  tier4: { label: 'Cold', short: 'T4', hint: 'Met cold-calling · low priority' },
+  tier4: { label: 'Cold lead', short: 'T4', hint: 'Met cold-calling · low priority' },
 };
 export const fmtKm = (m) => m == null ? '—' : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
 export const fmtDur = (s) => { if (s == null) return '—'; const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h ? `${h}h ${m}m` : `${m}m`; };

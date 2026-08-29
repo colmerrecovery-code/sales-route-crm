@@ -29,8 +29,8 @@ export default function CrmMap({ companies = [], numbered = false, route = null,
     <MapContainer center={[43.7, -79.7]} zoom={9} scrollWheelZoom zoomControl={false}>
       <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <FitBounds points={points} />
-      {line && <Polyline positions={line} pathOptions={{ color: '#2EB8FF', weight: 10, opacity: .18 }} />}
-      {line && <Polyline positions={line} pathOptions={{ color: '#2EB8FF', weight: 3, opacity: .95 }} />}
+      {line && <Polyline positions={line} pathOptions={{ color: '#19B5B8', weight: 10, opacity: .22 }} />}
+      {line && <Polyline positions={line} pathOptions={{ color: '#19B5B8', weight: 3, opacity: .95 }} />}
       {start && <Marker position={[start.lat, start.lng]} icon={pin('start')}><Popup>Start / home base</Popup></Marker>}
       {located.map((c, i) => (
         <Marker key={c.id} position={[c.lat, c.lng]} icon={numbered ? numPin(i + 1, c.visited) : pin(`${c.tier || 'tier2'} ${selected?.has(c.id) ? 'selected' : ''}`)} eventHandlers={onSelect ? { click: () => onSelect(c) } : {}}>

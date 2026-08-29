@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, auth } from '../services/api.js';
 import { Field } from '../components/Badges.jsx';
-import { Logo } from '../components/Icons.jsx';
+import { Lockup } from '../components/Icons.jsx';
 
 export default function Login({ onLogin }) {
   const [mode, setMode] = useState('login');
@@ -22,7 +22,7 @@ export default function Login({ onLogin }) {
   return (
     <div className="login">
       <form className="card" onSubmit={submit}>
-        <Logo />
+        <Lockup />
         <h1>{mode === 'login' ? 'Sign in' : 'Create account'}</h1>
         <p className="muted" style={{ marginTop: 0 }}>Customers, routes, and follow-ups in one place.</p>
         {error && <div className="alert" style={{ marginBottom: 12 }}>{error}</div>}

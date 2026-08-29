@@ -47,7 +47,7 @@ export default function Customers() {
         {rows.map((c) => (
           <div key={c.id} className="list-item clickable" onClick={() => openCompany(c.id)}>
             <div style={{ minWidth: 0 }}>
-              <div className="row" style={{ gap: 8 }}><Code>{c.company_code}</Code><Tier tier={c.tier} /><Temp t={c.temperature} /></div>
+              <div className="row" style={{ gap: 8 }}><Code>{c.company_code}</Code><Tier tier={c.tier} />{c.tier !== 'tier4' && <Temp t={c.temperature} />}</div>
               <div className="name" style={{ marginTop: 6 }}>{c.name}</div>
               <div className="small muted">{c.city}{c.lat == null ? ' · not on map' : ''}{c.last_contact_at ? ` · ${daysAgo(c.last_contact_at)}d since contact` : ''}</div>
             </div>
@@ -66,7 +66,7 @@ export default function Customers() {
                   <td><Code>{c.company_code}</Code></td>
                   <td><b>{c.name}</b>{c.lat == null && <div className="small muted">Not on map yet</div>}</td>
                   <td>{c.city}{c.postal_code ? ` · ${c.postal_code}` : ''}</td>
-                  <td><span className="row" style={{ gap: 6 }}><Tier tier={c.tier} /><Temp t={c.temperature} /></span></td>
+                  <td><span className="row" style={{ gap: 6 }}><Tier tier={c.tier} />{c.tier !== 'tier4' && <Temp t={c.temperature} />}</span></td>
                   <td className="num">{c.last_contact_at ? `${daysAgo(c.last_contact_at)}d ago` : '—'}</td>
                   <td><TouchPill next_touch_due={c.next_touch_due} last_contact_at={c.last_contact_at} /></td>
                 </tr>
@@ -96,7 +96,7 @@ function CompanyDetail({ company: c, onClose, onEdit, onChange }) {
 
   return (
     <Drawer title={c.name} sub={c.company_code} onClose={onClose}>
-      <div className="row"><Tier tier={c.tier} /><Temp t={c.temperature} /><TouchPill next_touch_due={c.next_touch_due} last_contact_at={c.last_contact_at} />{c.inactive_365 && <span className="pill red">No purchase 365+ days</span>}</div>
+      <div className="row"><Tier tier={c.tier} />{c.tier !== 'tier4' && <Temp t={c.temperature} />}<TouchPill next_touch_due={c.next_touch_due} last_contact_at={c.last_contact_at} />{c.inactive_365 && <span className="pill red">No purchase 365+ days</span>}</div>
       <p style={{ marginBottom: 2 }}>{[c.address, c.city, c.province, c.postal_code].filter(Boolean).join(', ')}</p>
       <p className="small muted" style={{ marginTop: 0 }}>{c.website}{c.lat == null ? ' · Not on map — check the address' : ''}</p>
       <div className="row">

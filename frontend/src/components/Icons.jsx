@@ -11,6 +11,5 @@ export const IconPhone = (p) => <I {...p}><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 
 export const IconNav = (p) => <I {...p}><path d="M3 11l18-8-8 18-2-8z" /></I>;
 export const IconPlus = (p) => <I {...p}><path d="M12 5v14M5 12h14" /></I>;
 export const IconX = (p) => <I {...p}><path d="M6 6l12 12M18 6L6 18" /></I>;
-export const Logo = () => (
-  <div className="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#06121F" strokeWidth="2.4" strokeLinecap="round"><path d="M5 19c0-7 14-4 14-13" /><circle cx="5" cy="19" r="2" fill="#06121F" /><circle cx="19" cy="6" r="2" fill="#06121F" /></svg></div>
-);
+export const Logo = ({ size = 40 }) => <img src="/brand/icon-192.png" alt="GoMichi" width={size} height={size} style={{ display: 'block', borderRadius: size * 0.22 }} />;
+export const Lockup = ({ className = 'brand-lockup' }) => <img src="/brand/lockup-dark.png" alt="GoMichi — Plan. Visit. Grow." className={className} />;

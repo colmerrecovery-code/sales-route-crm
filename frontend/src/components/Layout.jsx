@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { IconHome, IconPeople, IconMap, IconRoute, Logo } from './Icons.jsx';
+import { IconHome, IconPeople, IconMap, IconRoute, Lockup } from './Icons.jsx';
 
 const links = [
   ['/', 'Today', IconHome], ['/customers', 'Customers', IconPeople], ['/map', 'Map', IconMap], ['/trips', 'Road trips', IconRoute],
@@ -9,7 +9,7 @@ export default function Layout({ user, onSignOut, children }) {
   return (
     <div className="shell">
       <nav className="rail" aria-label="Main">
-        <div className="brand"><Logo />Sales Route</div>
+        <div className="brand"><Lockup /></div>
         {links.map(([to, label, Icon]) => (
           <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => isActive ? 'active' : ''}><Icon />{label}</NavLink>
         ))}

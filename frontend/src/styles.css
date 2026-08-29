@@ -1,17 +1,17 @@
 /* Sales Route CRM — design tokens
    Deep navy, cyan primary, orange secondary. Green = good, red = warning. Mobile first. */
 :root {
-  --bg: #0B1220;
+  --bg: #0A1526;
   --panel: #111A2B;
   --card: #182339;
   --card-2: #1F2C46;
   --line: #26344F;
   --text: #E8EEF8;
-  --muted: #8B9BB8;
-  --cyan: #2EB8FF;
-  --cyan-dim: rgba(46,184,255,.14);
-  --orange: #FF8A3D;
-  --orange-dim: rgba(255,138,61,.14);
+  --muted: #C3CDE0;
+  --cyan: #22C7CB;   /* brand teal (accent) */
+  --cyan-dim: rgba(34,199,203,.16);
+  --orange: #F4602A;  /* brand orange */
+  --orange-dim: rgba(244,96,42,.16);
   --green: #2ED47A;
   --green-dim: rgba(46,212,122,.14);
   --red: #FF5C6A;
@@ -44,8 +44,8 @@ h3 { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: u
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .num { font-variant-numeric: tabular-nums; }
-.good { color: var(--green); font-weight: 600; }
-.bad, .due { color: var(--red); font-weight: 600; }
+.good, .stat .sub.good { color: var(--green); font-weight: 600; }
+.bad, .due, .stat .sub.bad { color: var(--red); font-weight: 600; }
 
 /* Shell: bottom tabs on phones, left rail on wide screens */
 .shell { min-height: 100%; display: flex; flex-direction: column; }
@@ -155,7 +155,7 @@ tr.clickable:hover td { background: var(--card-2); }
 .map-side { order: 2; background: var(--panel); border-top: 1px solid var(--line); padding: 14px 16px; max-height: 46vh; overflow: auto; }
 .map-wrap { order: 1; position: relative; min-height: 220px; }
 .leaflet-container { height: 100%; width: 100%; background: #0E1626; }
-.leaflet-tile { filter: brightness(.7) invert(1) contrast(3) hue-rotate(200deg) saturate(.3) brightness(.7); }
+.leaflet-tile { filter: brightness(.9) invert(1) contrast(2.4) hue-rotate(200deg) saturate(.4) brightness(.95); }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--card); color: var(--text); border: 1px solid var(--line); }
 .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
 .leaflet-bar a { background: var(--card); color: var(--text); border-bottom-color: var(--line); }
@@ -197,10 +197,10 @@ tr.clickable:hover td { background: var(--card-2); }
 .tabs .btn { flex: 1; }
 
 /* Login */
-.login { min-height: 100%; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle at 20% 10%, rgba(46,184,255,.12), transparent 40%), radial-gradient(circle at 90% 90%, rgba(255,138,61,.10), transparent 40%), var(--bg); }
+.login { min-height: 100%; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle at 20% 10%, rgba(25,181,184,.12), transparent 40%), radial-gradient(circle at 90% 90%, rgba(244,96,42,.10), transparent 40%), var(--bg); }
 .login .card { width: min(420px, 100%); padding: 26px; }
 .login h1 { margin: 4px 0 2px; }
-.logo { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--cyan), #1E7BFF); display: grid; place-items: center; }
+.logo { width: 40px; height: 40px; border-radius: 12px; background: transparent; display: grid; place-items: center; }
 .logo svg { width: 22px; height: 22px; }
 
 /* Desktop: sidebar layout, roomier grids, side drawer */
@@ -248,7 +248,27 @@ tr.clickable:hover td { background: var(--card-2); }
 .cust-cards { display: flex; flex-direction: column; gap: 10px; }
 .cust-table { display: none; }
 @media (min-width: 900px) { .cust-cards { display: none; } .cust-table { display: block; } }
-.fab { position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-b) + 16px); z-index: 700; width: 56px; height: 56px; border-radius: 50%; background: var(--cyan); color: var(--ink-on-accent); border: 0; display: grid; place-items: center; box-shadow: 0 8px 24px rgba(46,184,255,.35); cursor: pointer; }
+.fab { position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-b) + 16px); z-index: 700; width: 56px; height: 56px; border-radius: 50%; background: var(--cyan); color: var(--ink-on-accent); border: 0; display: grid; place-items: center; box-shadow: 0 8px 24px rgba(25,181,184,.35); cursor: pointer; }
 .fab svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; }
 @media (min-width: 900px) { .fab { display: none; } }
 .hide-mobile { display: none; } @media (min-width: 900px) { .hide-mobile { display: inline-flex; } }
+
+/* Brand assets */
+.rail .brand { padding: 0 4px 18px; }
+
+/* Customers table: full white text */
+.cust-table th, .cust-table td { color: var(--text); }
+.map-side .filters { flex-wrap: wrap; }
+.map-side .filters > * { flex: 1 1 45%; min-width: 0; }
+
+/* Typed wordmark beside the S mark (until the logo is re-lettered) */
+.brand-row { display: flex; align-items: center; gap: 10px; height: auto; }
+.brand-row img { height: 40px; width: auto; }
+.brand-row b { display: block; font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -.02em; line-height: 1; color: var(--text); }
+.brand-row b::first-letter { color: var(--orange); }
+.brand-row span { display: block; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); margin-top: 3px; }
+.login .brand-row { justify-content: center; margin-bottom: 14px; }
+.login .brand-row img { height: 52px; }
+
+.brand-lockup { height: 46px; width: auto; display: block; }
+.login .brand-lockup { height: 62px; margin: 0 auto 16px; }
