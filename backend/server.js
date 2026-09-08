@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import path from 'node:path';
+import fs from 'node:fs';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -25,6 +27,20 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', requireAuth, companyRoutes);
 app.use('/api/trips', requireAuth, tripRoutes);
+
+/* In production the API also serves the built front end, so the whole app lives
+   at one address. That removes the cross-origin setup entirely and gives a
+   single URL to hand someone — worth more than the few dollars a second service
+   would cost. Locally this directory does not exist and the block is skipped,
+   leaving the Vite dev server in charge as before. */
+const CLIENT = path.resolve(process.env.CLIENT_DIR || '../frontend/dist');
+if (fs.existsSync(CLIENT)) {
+  app.use(express.static(CLIENT));
+  // Anything that is not an API call is a front-end route: hand back index.html
+  // and let the browser router work out the rest.
+  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(CLIENT, 'index.html')));
+  console.log(`Serving the app from ${CLIENT}`);
+}
 
 app.use(notFound);
 app.use(errorHandler);

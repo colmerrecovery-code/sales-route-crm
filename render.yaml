@@ -1,0 +1,51 @@
+# How GoMichi is deployed on Render.
+#
+# ONE service, not two. The Node server serves the built front end as well as
+# the API, so the whole app lives at a single address. That removes the
+# cross-origin setup entirely and gives one URL to hand somebody — worth more
+# than the few dollars a separate static site would have saved.
+#
+# The database starts empty. schema.sql never runs here (that is a Docker-only
+# hook on Troy's Mac), so the migrations build it: 001 creates everything, then
+# 003 and 004 add day bases and the visit cadence. Verified to produce a schema
+# identical to the Docker path.
+
+databases:
+  - name: gomichi-db
+    databaseName: gomichi
+    user: gomichi
+    plan: basic-256mb          # check the price on the confirmation screen
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: gomichi
+    runtime: node
+    plan: starter              # NOT free: free instances sleep, and a cold
+                               # start in a customer's car park is the one
+                               # place this must not happen
+    region: ohio
+    branch: main
+    # Build the front end first, then install the server's dependencies.
+    buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
+    # cwd becomes backend/, which is what makes ../frontend/dist and
+    # ../database/migrations resolve without hard-coded paths.
+    startCommand: cd backend && node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gomichi-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true    # Render invents one; nobody ever sees or types it
+      # Paste the Mapbox token into the dashboard when prompted. Kept out of the
+      # repo deliberately — this file is public, the token is not.
+      - key: MAPBOX_TOKEN
+        sync: false
+      - key: MAPBOX_PUBLIC_TOKEN
+        sync: false
+      - key: MAPBOX_GEOCODING
+        value: "true"

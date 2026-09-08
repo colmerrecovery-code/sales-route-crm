@@ -1,13 +1,20 @@
 /* Work out where the API lives at RUN time, not build time.
    A production build bakes in whatever it can see when it is compiled, so a
    hard-coded localhost would break the moment the page is opened from a phone.
-   Using the hostname the page was served from means the same build works on
-   the laptop, over Wi-Fi, and on a real domain later. */
+
+   Three situations, and the app has to get all three right from one build:
+     hosted      - the server serves the app AND the API, so /api is same-origin
+     local dev   - Vite serves the app on 5173, the API is a separate 4000
+     override    - VITE_API_URL, if anyone ever splits them apart again
+   The dev case is the odd one out, so it is the one that gets detected. */
+const DEV_PORT = '5173';
 const API_PORT = import.meta.env.VITE_API_PORT || '4000';
-const BASE = import.meta.env.VITE_API_URL
-  || (typeof window !== 'undefined'
-        ? `${window.location.protocol}//${window.location.hostname}:${API_PORT}/api`
-        : 'http://localhost:4000/api');
+const BASE = import.meta.env.VITE_API_URL || (() => {
+  if (typeof window === 'undefined') return 'http://localhost:4000/api';
+  const { protocol, hostname, port } = window.location;
+  if (port === DEV_PORT) return `${protocol}//${hostname}:${API_PORT}/api`;
+  return '/api';   // served by the same server that serves this page
+})();
 const TOKEN_KEY = 'srcrm_token';
 
 export const auth = {
