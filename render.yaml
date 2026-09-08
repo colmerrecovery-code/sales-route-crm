@@ -14,14 +14,14 @@ databases:
   - name: gomichi-db
     databaseName: gomichi
     user: gomichi
-    plan: basic-256mb          # check the price on the confirmation screen
+    plan: 0.1c-256mb        # smallest paid Postgres; check price on the confirm screen
     postgresMajorVersion: "16"
 
 services:
   - type: web
     name: gomichi
     runtime: node
-    plan: starter              # NOT free: free instances sleep, and a cold
+    plan: 0.5c-512mb           # NOT free: free instances sleep, and a cold
                                # start in a customer's car park is the one
                                # place this must not happen
     region: ohio
