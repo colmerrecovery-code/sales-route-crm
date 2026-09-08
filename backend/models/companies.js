@@ -3,7 +3,7 @@ import { query } from '../config/db.js';
 const cols = `id, owner_id, company_code, name, address, city, postal_code, province, country, phone, website, notes,
   created_at, updated_at, tier, temperature, last_contact_at, last_purchase_at, next_touch_due, annual_value, lat, lng, inactive_365`;
 
-export async function list(ownerId, { tier, temperature, city, postal_code, q, near, radius_km, due } = {}) {
+export async function list(ownerId, { tier, temperature, city, postal_code, q, near, radius_km, due, limit, offset, fields } = {}) {
   const where = ['owner_id = $1']; const params = [ownerId];
   const add = (sql, v) => { params.push(v); where.push(sql.replace('?', `$${params.length}`)); };
   if (tier) add('tier = ?', tier);
@@ -17,8 +17,31 @@ export async function list(ownerId, { tier, temperature, city, postal_code, q, n
     params.push(lng, lat, (Number(radius_km) || 25) * 1000);
     where.push(`ST_DWithin(location, ST_SetSRID(ST_MakePoint($${params.length - 2}, $${params.length - 1}),4326)::geography, $${params.length})`);
   }
-  const { rows } = await query(`SELECT ${cols} FROM company_overview WHERE ${where.join(' AND ')} ORDER BY name`, params);
-  return rows;
+  const whereSql = where.join(' AND ');
+
+  // `fields=map` ships only what a pin needs, and only pinned companies —
+  // a fraction of the payload when the map is all you're drawing.
+  const isMap = fields === 'map';
+  const select = isMap
+    ? 'id, company_code, name, address, city, tier, temperature, lat, lng'   // no notes/dates — the bulk of the payload
+    : cols;
+  const mapOnly = isMap ? ' AND location IS NOT NULL' : '';
+
+  const n = Number(limit);
+  if (!Number.isFinite(n) || n <= 0) {
+    const { rows } = await query(
+      `SELECT ${select} FROM company_overview WHERE ${whereSql}${mapOnly} ORDER BY name`, params);
+    return rows;
+  }
+
+  // Paged: give back the slice plus the true total, so the UI can say "50 of 956".
+  const take = Math.min(n, 200);
+  const skip = Math.max(0, Number(offset) || 0);
+  const [{ rows }, { rows: [count] }] = await Promise.all([
+    query(`SELECT ${select} FROM company_overview WHERE ${whereSql}${mapOnly} ORDER BY name LIMIT ${take} OFFSET ${skip}`, params),
+    query(`SELECT count(*)::int AS total FROM company_overview WHERE ${whereSql}${mapOnly}`, params),
+  ]);
+  return { rows, total: count.total, limit: take, offset: skip };
 }
 
 export async function get(ownerId, id) {
@@ -53,7 +76,7 @@ export async function update(ownerId, id, data, geo) {
   if (geo) { params.push(geo.lng, geo.lat); sets.push(`location=ST_SetSRID(ST_MakePoint($${params.length - 1},$${params.length}),4326)::geography`); }
   if (sets.length) await query(`UPDATE companies SET ${sets.join(',')} WHERE owner_id=$1 AND id=$2`, params);
 
-  const cf = ['tier', 'temperature', 'last_contact_at', 'last_purchase_at', 'annual_value'];
+  const cf = ['tier', 'temperature', 'last_contact_at', 'last_purchase_at', 'annual_value', 'touch_interval_days'];
   const csets = []; const cparams = [id];
   for (const f of cf) if (f in data) { cparams.push(data[f]); csets.push(`${f}=$${cparams.length}`); }
   if (csets.length) await query(`UPDATE customers SET ${csets.join(',')} WHERE company_id=$1`, cparams);

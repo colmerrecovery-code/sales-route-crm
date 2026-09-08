@@ -95,6 +95,15 @@ textarea { min-height: 80px; }
 .link { color: var(--cyan); font-weight: 600; font-size: 13px; text-decoration: none; }
 .list { display: flex; flex-direction: column; gap: 10px; }
 .list-item { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+/* A flex child defaults to min-width:auto, so it refuses to shrink below its
+   longest word and pushes the whole page sideways. Every flex row that holds
+   customer or trip names needs this or the page scrolls horizontally on a phone. */
+.list-item > * { min-width: 0; }
+.picker label > * { min-width: 0; }
+.name { overflow-wrap: anywhere; }
+/* Nothing on a page should scroll the page sideways. Wide content that genuinely
+   needs it (tables, the stop picker) has its own scroll container already. */
+.page { overflow-x: clip; }
 .list-item.clickable { cursor: pointer; }
 .list-item.clickable:active, .list-item.clickable:hover { background: var(--card-2); }
 .li-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); }
@@ -272,3 +281,8 @@ tr.clickable:hover td { background: var(--card-2); }
 
 .brand-lockup { height: 46px; width: auto; display: block; }
 .login .brand-lockup { height: 62px; margin: 0 auto 16px; }
+
+/* A value you can edit in place, without looking like a button in a dense row. */
+.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--cyan);
+  cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.linklike:hover { color: var(--text); }

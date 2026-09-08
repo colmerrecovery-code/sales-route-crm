@@ -14,7 +14,9 @@ export default function MapView() {
   const [showList, setShowList] = useState(false);
   const nav = useNavigate();
 
-  useEffect(() => { api.companies(filters).then(setRows); }, [filters]);
+  // Pins only need a handful of columns; the full record carries long notes
+  // and a dozen dates that never appear on the map.
+  useEffect(() => { api.companiesForMap(filters).then(setRows); }, [filters]);
   useEffect(() => { api.trips().then((t) => setTrips(t.filter((x) => x.status !== 'completed' && x.status !== 'cancelled'))); }, []);
 
   const toggle = (id) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });

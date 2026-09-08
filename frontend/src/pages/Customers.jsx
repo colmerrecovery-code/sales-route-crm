@@ -6,14 +6,130 @@ import { IconPlus, IconPhone, IconNav } from '../components/Icons.jsx';
 
 const blank = { name: '', address: '', city: '', postal_code: '', province: 'ON', country: 'Canada', phone: '', tier: 'tier2', temperature: 'warm', notes: '' };
 
-export default function Customers() {
+/**
+ * How often to come back to THIS customer.
+ *
+ * Blank means "use whatever I set for this tier", which is the common case —
+ * a rep sets one rhythm and only overrides the handful that need it. Saying so
+ * in the placeholder matters: an empty box that silently means "never" would
+ * quietly drop customers out of the cycle.
+ */
+/**
+ * The rhythm of the roster: how often each kind of customer comes round.
+ *
+ * This is the setting the whole "never lose touch with a customer" idea rests
+ * on, and until now it was a 90-day constant buried in a database trigger that
+ * only applied to current customers. A rep selling consumables works a six-week
+ * cycle; capital equipment is six months; and prospects need a cycle of their
+ * own, which tier-1-only never gave them.
+ *
+ * Blank means that tier has NO cycle — those customers simply never fall due.
+ * That is a legitimate choice, so it is spelled out rather than left to guess.
+ */
+function CadenceDefaults({ user, onUserChange }) {
+  const keys = { tier1: 'touch_days_tier1', tier2: 'touch_days_tier2', tier3: 'touch_days_tier3', tier4: 'touch_days_tier4' };
+  const current = () => Object.fromEntries(Object.entries(keys).map(([t, k]) => [t, user?.[k] ?? '']));
+  const [vals, setVals] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  useEffect(() => { setVals(current()); }, [user]);
+
+  const dirty = Object.entries(keys).some(([t, k]) => String(user?.[k] ?? '') !== String(vals[t]));
+
+  async function save() {
+    setBusy(true); setMsg(null);
+    try {
+      const body = Object.fromEntries(Object.entries(keys)
+        .map(([t, k]) => [k, vals[t] === '' ? null : Number(vals[t])]));
+      onUserChange?.(await api.setCadence(body));
+      setMsg('Saved. Every customer\u2019s next touch has been recalculated.');
+    } catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="card section">
+      <div className="eyebrow">Visit cycle</div>
+      <p className="small muted" style={{ marginTop: 4 }}>
+        How long before a customer is due again. Leave one blank and that group never falls due.
+        Any single customer can override this on their own page.
+      </p>
+      <div className="row" style={{ gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+        {Object.entries(TIERS).map(([t, meta]) => (
+          <label key={t} className="small" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Tier tier={t} />
+            <input type="number" min={1} max={1095} value={vals[t]} disabled={busy}
+              placeholder="never"
+              onChange={(e) => setVals({ ...vals, [t]: e.target.value })}
+              style={{ width: 84, padding: '4px 6px' }} />
+            <span className="muted">days</span>
+          </label>
+        ))}
+        <button className="btn sm primary" disabled={busy || !dirty} onClick={save}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+      {msg && <div className="small muted" style={{ marginTop: 8 }}>{msg}</div>}
+    </div>
+  );
+}
+
+function CadenceRow({ c, onSaved }) {
+  const [val, setVal] = useState(c.touch_interval_days ?? '');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  useEffect(() => { setVal(c.touch_interval_days ?? ''); setMsg(null); }, [c.id, c.touch_interval_days]);
+
+  const save = async (v) => {
+    setBusy(true); setMsg(null);
+    try {
+      await api.updateCompany(c.id, { touch_interval_days: v === '' ? null : Number(v) });
+      setMsg(v === '' ? 'Back to the default for this tier.' : `Every ${v} days.`);
+      onSaved?.();
+    } catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="row section" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span className="small muted">Come back every</span>
+      <input type="number" min={1} max={1095} value={val} disabled={busy}
+        placeholder="tier default"
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') save(val); }}
+        style={{ width: 110, padding: '4px 6px' }} />
+      <span className="small muted">days</span>
+      <button className="btn sm" disabled={busy || String(c.touch_interval_days ?? '') === String(val)}
+        onClick={() => save(val)}>Save</button>
+      {c.touch_interval_days != null && (
+        <button className="btn sm ghost" disabled={busy} onClick={() => save('')}>Use tier default</button>
+      )}
+      {msg && <span className="small muted">{msg}</span>}
+    </div>
+  );
+}
+
+export default function Customers({ user, onUserChange }) {
+  const PAGE = 50;
+  const [showCycle, setShowCycle] = useState(false);
   const [params, setParams] = useSearchParams();
   const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
   const filters = { tier: params.get('tier') || '', temperature: params.get('temperature') || '', city: params.get('city') || '', postal_code: params.get('postal_code') || '', q: params.get('q') || '', due: params.get('due') || '' };
 
-  const load = useCallback(() => api.companies(filters).then(setRows), [params]);
+  /* Load one page at a time. Drawing all 956 at once locked the phone up for
+     several seconds; 50 renders instantly and most searches never need more. */
+  const fetchPage = useCallback(async (offset) => {
+    setLoading(true);
+    try {
+      const page = await api.companiesPage(filters, PAGE, offset);
+      setTotal(page.total);
+      setRows((prev) => (offset === 0 ? page.rows : [...prev, ...page.rows]));
+    } finally { setLoading(false); }
+  }, [params]);
+
+  const load = useCallback(() => fetchPage(0), [fetchPage]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { const id = params.get('open'); if (id) api.company(id).then(setOpen); }, [params]);
 
@@ -24,12 +140,14 @@ export default function Customers() {
   return (
     <div className="page">
       <div className="page-head">
-        <div><div className="eyebrow">{rows.length} companies</div><h1>Customers</h1></div>
+        <div><div className="eyebrow">{total ? (rows.length < total ? `${rows.length} of ${total} companies` : `${total} companies`) : 'Companies'}</div><h1>Customers</h1></div>
         <button className="btn primary hide-mobile" onClick={() => setEditing({ ...blank })}><IconPlus />Add company</button>
       </div>
 
       <div className="filters">
         <input placeholder="Search name or code" value={filters.q} onChange={(e) => setFilter('q', e.target.value)} />
+        <button className={`btn sm ${showCycle ? 'primary' : ''}`} onClick={() => setShowCycle((v) => !v)}
+          title="How often each kind of customer comes round">Visit cycle</button>
         <select value={filters.tier} onChange={(e) => setFilter('tier', e.target.value)}>
           <option value="">All tiers</option>{Object.entries(TIERS).map(([k, t]) => <option key={k} value={k}>{t.label}</option>)}
         </select>
@@ -41,7 +159,10 @@ export default function Customers() {
         <input placeholder="Postal code" value={filters.postal_code} onChange={(e) => setFilter('postal_code', e.target.value)} />
       </div>
 
-      {rows.length === 0 && <div className="card muted">No companies match. Clear a filter or add your first company.</div>}
+      {showCycle && <CadenceDefaults user={user} onUserChange={onUserChange} />}
+
+      {rows.length === 0 && !loading && <div className="card muted">No companies match. Clear a filter or add your first company.</div>}
+      {rows.length === 0 && loading && <div className="card muted">Loading…</div>}
 
       <div className="cust-cards">
         {rows.map((c) => (
@@ -75,6 +196,14 @@ export default function Customers() {
           </table>
         </div>
       </div>
+
+      {rows.length < total && (
+        <div className="row" style={{ justifyContent: 'center', margin: '14px 0 4px' }}>
+          <button className="btn ghost" disabled={loading} onClick={() => fetchPage(rows.length)}>
+            {loading ? 'Loading…' : `Show 50 more (${total - rows.length} left)`}
+          </button>
+        </div>
+      )}
 
       <button className="fab" aria-label="Add company" onClick={() => setEditing({ ...blank })}><IconPlus /></button>
 
@@ -110,6 +239,8 @@ function CompanyDetail({ company: c, onClose, onEdit, onChange }) {
         <div className="card" style={{ padding: 12 }}><div className="eyebrow">Last purchase</div><b>{fmtDate(c.last_purchase_at)}</b></div>
         <div className="card" style={{ padding: 12 }}><div className="eyebrow">Next touch</div><b className={c.next_touch_due && new Date(c.next_touch_due) <= new Date() ? 'bad' : ''}>{fmtDate(c.next_touch_due)}</b></div>
       </div>
+
+      <CadenceRow c={c} onSaved={refresh} />
 
       <div className="section">
         <h3>Log an interaction</h3>

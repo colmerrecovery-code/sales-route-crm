@@ -11,7 +11,13 @@ export async function listForCompany(ownerId, companyId, limit = 50) {
 export async function create(ownerId, d) {
   const { rows } = await query(
     `INSERT INTO interactions (company_id, client_id, user_id, kind, occurred_at, summary, outcome)
-     SELECT $2,$3,$1,$4,coalesce($5, now()),$6,$7 WHERE EXISTS (SELECT 1 FROM companies WHERE id=$2 AND owner_id=$1)
+     SELECT $2,$3,$1,$4,coalesce($5, now()),$6,$7
+      WHERE EXISTS (SELECT 1 FROM companies WHERE id=$2 AND owner_id=$1)
+        -- the contact must belong to a company you own, too: without this a
+        -- guessed id could pull another account's contact name into a join
+        AND ($3::uuid IS NULL OR EXISTS (
+              SELECT 1 FROM clients cl JOIN companies c2 ON c2.id = cl.company_id
+               WHERE cl.id = $3 AND c2.owner_id = $1))
      RETURNING *`, [ownerId, d.company_id, d.client_id || null, d.kind, d.occurred_at || null, d.summary, d.outcome]);
   return rows[0] || null;
 }

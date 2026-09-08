@@ -3,3 +3,25 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# ---------------------------------------------------------------------------
+# REAL CUSTOMER DATA — NEVER COMMIT.
+#
+# database/import/ holds the exports the working database was built from:
+# roughly 950 company locations and 2,850 named contacts with direct email
+# addresses and phone numbers, belonging to an employer, not to this project.
+#
+# Once anything lands in git history it is effectively permanent and follows
+# every clone and every push. This app is intended to be published, so a single
+# "git add ." would put someone else's customer list on GitHub for good.
+#
+# Demo and seed data live in database/seed-data.sql and backend/scripts/
+# demo-data.js — both entirely fictional. Use those.
+# ---------------------------------------------------------------------------
+database/import/
+*.csv
+!database/seed*.csv
+
+# Local backups made while editing. Useful on the machine, noise in the repo.
+*.bak
+*.bak[0-9]

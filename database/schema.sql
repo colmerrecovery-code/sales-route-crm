@@ -21,6 +21,12 @@ CREATE TABLE users (
   full_name     TEXT NOT NULL,
   home_location GEOGRAPHY(POINT, 4326),      -- trip start/end default
   home_address  TEXT,
+  -- How often to come back round to a customer, per tier. NULL = no cycle, so
+  -- customers of that tier never fall due. Overridable per customer.
+  touch_days_tier1 INTEGER DEFAULT 90,
+  touch_days_tier2 INTEGER,
+  touch_days_tier3 INTEGER,
+  touch_days_tier4 INTEGER,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -72,7 +78,8 @@ CREATE TABLE customers (
   temperature      lead_temperature,           -- only meaningful for tier2/tier4
   last_contact_at  TIMESTAMPTZ,
   last_purchase_at TIMESTAMPTZ,
-  next_touch_due   DATE,                       -- quarterly for tier1, computed by trigger
+  next_touch_due   DATE,                       -- computed by trigger from the interval below
+  touch_interval_days INTEGER,                 -- NULL = use the owner's default for this tier
   annual_value     NUMERIC(12,2),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -114,6 +121,21 @@ CREATE TABLE road_trips (
 );
 CREATE INDEX road_trips_owner_idx ON road_trips (owner_id, start_date);
 
+-- Where each day of a trip starts. A row for day N is where you set out on the
+-- MORNING of day N, so the END of day N is the base of day N+1 (tonight's
+-- hotel). No row = fall back to the trip's start_location. See migration 003.
+CREATE TABLE trip_day_bases (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id     UUID NOT NULL REFERENCES road_trips(id) ON DELETE CASCADE,
+  day_number  INTEGER NOT NULL CHECK (day_number >= 1),
+  label       TEXT,
+  address     TEXT,
+  location    GEOGRAPHY(POINT, 4326) NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (trip_id, day_number)
+);
+CREATE INDEX trip_day_bases_trip_idx ON trip_day_bases (trip_id, day_number);
+
 -- Recurring break definitions for a trip (applied to each day when repeat_daily)
 CREATE TABLE break_times (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -153,11 +175,35 @@ CREATE TRIGGER companies_touch BEFORE UPDATE ON companies FOR EACH ROW EXECUTE F
 CREATE TRIGGER road_trips_touch BEFORE UPDATE ON road_trips FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 CREATE TRIGGER customers_touch BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
--- Quarterly reminder for tier1; 365-day inactivity demotion handled by a scheduled query
+-- When a customer is due again. The interval is the rep's to choose: their own
+-- default for that tier, or an override on the single customer. NULL at both
+-- levels means no cycle, so that customer never falls due.
+-- (Kept identical to migration 004 — a fresh install must behave the same as a
+-- migrated one, rather than starting wrong and being corrected a moment later.)
 CREATE OR REPLACE FUNCTION customers_set_next_touch() RETURNS TRIGGER AS $$
+DECLARE
+  days INTEGER;
 BEGIN
-  IF NEW.tier = 'tier1' AND NEW.last_contact_at IS NOT NULL THEN
-    NEW.next_touch_due = (NEW.last_contact_at + INTERVAL '90 days')::date;
+  IF NEW.last_contact_at IS NULL THEN
+    NEW.next_touch_due := NULL;
+    RETURN NEW;
+  END IF;
+  days := NEW.touch_interval_days;
+  IF days IS NULL THEN
+    SELECT CASE NEW.tier
+             WHEN 'tier1' THEN u.touch_days_tier1
+             WHEN 'tier2' THEN u.touch_days_tier2
+             WHEN 'tier3' THEN u.touch_days_tier3
+             WHEN 'tier4' THEN u.touch_days_tier4
+           END
+      INTO days
+      FROM companies c JOIN users u ON u.id = c.owner_id
+     WHERE c.id = NEW.company_id;
+  END IF;
+  IF days IS NOT NULL AND days > 0 THEN
+    NEW.next_touch_due := (NEW.last_contact_at + (days || ' days')::interval)::date;
+  ELSE
+    NEW.next_touch_due := NULL;
   END IF;
   RETURN NEW;
 END $$ LANGUAGE plpgsql;
@@ -179,7 +225,8 @@ CREATE VIEW company_overview AS
 SELECT c.*, cu.tier, cu.temperature, cu.last_contact_at, cu.last_purchase_at,
        cu.next_touch_due, cu.annual_value,
        ST_Y(c.location::geometry) AS lat, ST_X(c.location::geometry) AS lng,
-       (cu.last_purchase_at IS NOT NULL AND cu.last_purchase_at < now() - INTERVAL '365 days') AS inactive_365
+       (cu.last_purchase_at IS NOT NULL AND cu.last_purchase_at < now() - INTERVAL '365 days') AS inactive_365,
+       cu.touch_interval_days
 FROM companies c LEFT JOIN customers cu ON cu.company_id = c.id;
 
 -- Company code sequence (per owner codes are generated in the API; this is a global fallback)

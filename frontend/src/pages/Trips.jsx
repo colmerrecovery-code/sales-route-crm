@@ -41,7 +41,7 @@ export default function Trips() {
         {trips.length === 0 && <div className="card muted">No trips yet. Create one here, or pick customers on the map.</div>}
         {trips.map((t) => (
           <div key={t.id} className="list-item clickable" onClick={() => nav(`/trips/${t.id}`)}>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="row" style={{ gap: 8 }}><span className={`pill ${statusPill[t.status]}`}>{t.status.replace('_', ' ')}</span><span className="small muted">{fmtDate(t.start_date)}{t.end_date ? ` – ${fmtDate(t.end_date)}` : ' · open-ended'}</span></div>
               <div className="name" style={{ marginTop: 6 }}>{t.name}</div>
               <div className="small muted num">{t.stop_count} stops{t.total_distance_m ? ` · ${fmtKm(t.total_distance_m)} · ${fmtDur(t.total_duration_s)} driving` : ' · not routed yet'}</div>

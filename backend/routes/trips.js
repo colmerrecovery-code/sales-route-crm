@@ -16,6 +16,13 @@ r.delete('/:id/stops/:stopId', c.removeStop);
 r.post('/:id/breaks', validate(c.breakSchema), c.addBreak);
 r.delete('/:id/breaks/:breakId', c.removeBreak);
 
+// Where a day starts — day N's base is also where day N-1 finishes.
+r.put('/:id/days/:day/base', validate(c.dayBaseSchema), c.setDayBase);
+r.delete('/:id/days/:day/base', c.clearDayBase);
+
+r.patch('/:id/visit-length', validate(c.visitLengthSchema), c.setVisitLength);
+
 r.post('/:id/optimize', c.optimize);
+r.post('/:id/replan', validate(c.replanSchema), c.replan);
 r.get('/:id/directions', c.getDirections);
 export default r;

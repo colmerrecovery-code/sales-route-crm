@@ -34,7 +34,7 @@ export default function App() {
       <ErrorBoundary resetKey={location.pathname}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/customers" element={<Customers />} />
+        <Route path="/customers" element={<Customers user={user} onUserChange={setUser} />} />
         <Route path="/map" element={<MapView />} />
         <Route path="/trips" element={<Trips />} />
         <Route path="/trips/:id" element={<TripBuilder user={user} />} />

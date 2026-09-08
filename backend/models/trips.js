@@ -23,7 +23,34 @@ export async function get(ownerId, id) {
        LEFT JOIN break_times b ON b.id=s.break_id
       WHERE s.trip_id=$1 ORDER BY day_number, sequence`, [id]);
   const { rows: breaks } = await query('SELECT * FROM break_times WHERE trip_id=$1 ORDER BY starts_at', [id]);
-  return { ...trip, stops, breaks };
+  const { rows: day_bases } = await query(
+    `SELECT day_number, label, address,
+            ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
+       FROM trip_day_bases WHERE trip_id=$1 ORDER BY day_number`, [id]);
+  return { ...trip, stops, breaks, day_bases };
+}
+
+/**
+ * Set where a day STARTS. Day N's row is tonight-before's destination: the end
+ * of day N-1 is wherever day N begins. See migration 003.
+ */
+export async function setDayBase(ownerId, tripId, day, { label, address, lat, lng }) {
+  const { rows: [owned] } = await query('SELECT id FROM road_trips WHERE id=$1 AND owner_id=$2', [tripId, ownerId]);
+  if (!owned) return null;
+  await query(
+    `INSERT INTO trip_day_bases (trip_id, day_number, label, address, location)
+     VALUES ($1,$2,$3,$4, ST_SetSRID(ST_MakePoint($6,$5),4326)::geography)
+     ON CONFLICT (trip_id, day_number)
+     DO UPDATE SET label=EXCLUDED.label, address=EXCLUDED.address, location=EXCLUDED.location`,
+    [tripId, day, label || null, address || null, lat, lng]);
+  return get(ownerId, tripId);
+}
+
+export async function removeDayBase(ownerId, tripId, day) {
+  const { rows: [owned] } = await query('SELECT id FROM road_trips WHERE id=$1 AND owner_id=$2', [tripId, ownerId]);
+  if (!owned) return null;
+  await query('DELETE FROM trip_day_bases WHERE trip_id=$1 AND day_number=$2', [tripId, day]);
+  return get(ownerId, tripId);
 }
 
 const pt = (lat, lng, i) => (lat != null && lng != null) ? `ST_SetSRID(ST_MakePoint($${i + 1},$${i}),4326)::geography` : 'NULL';
@@ -55,12 +82,19 @@ export async function remove(ownerId, id) {
   return rowCount > 0;
 }
 
-/** Append customer stops (unscheduled, appended to last day). */
-export async function addStops(ownerId, tripId, companyIds, durationMin) {
+/** Append customer stops to a day (untimed until the day is recalculated). */
+export async function addStops(ownerId, tripId, companyIds, durationMin, targetDay) {
   const trip = await get(ownerId, tripId);
   if (!trip) return null;
-  const last = trip.stops.at(-1);
-  let day = last?.day_number || 1, seq = (last?.sequence || 0) + 1;
+  let day, seq;
+  if (targetDay) {
+    day = targetDay;
+    const onDay = trip.stops.filter(s => s.day_number === targetDay);
+    seq = (onDay.at(-1)?.sequence || 0) + 1;
+  } else {
+    const last = trip.stops.at(-1);
+    day = last?.day_number || 1; seq = (last?.sequence || 0) + 1;
+  }
   const existing = new Set(trip.stops.map(s => s.company_id));
   for (const cid of companyIds) {
     if (existing.has(cid)) continue;
@@ -76,10 +110,42 @@ export async function removeStop(ownerId, tripId, stopId) {
   return rowCount > 0;
 }
 
+/**
+ * Set how long every visit on a trip takes.
+ *
+ * Two things have to move together, which is why this is one call rather than a
+ * loop of updateStop from the browser: the trip's default (what NEW stops
+ * inherit) and the duration already stored on each existing stop. Changing only
+ * the default silently does nothing to the day you are looking at.
+ *
+ * Visited stops are left alone — they already happened, and rewriting how long
+ * they took would be a lie.
+ */
+export async function setVisitLength(ownerId, tripId, minutes) {
+  const { rows: [owned] } = await query('SELECT id FROM road_trips WHERE id=$1 AND owner_id=$2', [tripId, ownerId]);
+  if (!owned) return null;
+  await query('UPDATE road_trips SET default_visit_min=$2 WHERE id=$1', [tripId, minutes]);
+  const { rowCount } = await query(
+    `UPDATE trip_stops SET duration_min=$2
+      WHERE trip_id=$1 AND kind='customer' AND NOT visited`, [tripId, minutes]);
+  return { trip: await get(ownerId, tripId), changed: rowCount };
+}
+
 export async function updateStop(ownerId, tripId, stopId, d) {
   const fields = ['duration_min', 'visited', 'notes'];
   const sets = []; const params = [ownerId, tripId, stopId];
   for (const f of fields) if (f in d) { params.push(d[f]); sets.push(`${f}=$${params.length}`); }
+
+  /* Moving a stop to another day drops its old timings — it has to be
+     recalculated against that day's schedule before the times mean anything. */
+  if (d.day_number) {
+    const { rows: [tail] } = await query(
+      'SELECT coalesce(max(sequence),0) AS n FROM trip_stops WHERE trip_id=$1 AND day_number=$2',
+      [tripId, d.day_number]);
+    params.push(d.day_number, Number(tail.n) + 1);
+    sets.push(`day_number=$${params.length - 1}`, `sequence=$${params.length}`,
+              'planned_arrival=NULL', 'planned_depart=NULL', 'leg_distance_m=NULL', 'leg_duration_s=NULL');
+  }
   if (!sets.length) return null;
   const { rows } = await query(
     `UPDATE trip_stops SET ${sets.join(',')} WHERE id=$3 AND trip_id=$2 AND EXISTS (SELECT 1 FROM road_trips WHERE id=$2 AND owner_id=$1) RETURNING *`, params);
@@ -101,6 +167,36 @@ export async function replaceStops(ownerId, tripId, scheduled, totals) {
     await c.query('UPDATE road_trips SET total_distance_m=$2, total_duration_s=$3, status=CASE WHEN status=\'draft\' THEN \'planned\' ELSE status END WHERE id=$1',
       [tripId, totals.distance_m, totals.duration_s]);
   }).then(() => get(ownerId, tripId));
+}
+
+/**
+ * Replace the stops of ONE day, leaving every other day untouched.
+ *
+ * Re-planning mid-afternoon must not disturb the rest of the week, so this is
+ * scoped to a single day rather than going through replaceStops. Trip totals are
+ * recomputed afterwards from whatever legs remain, so the header stays honest.
+ */
+export async function replaceDayStops(ownerId, tripId, day, rows) {
+  return withTransaction(async (c) => {
+    const { rows: [owned] } = await c.query('SELECT 1 FROM road_trips WHERE id=$1 AND owner_id=$2', [tripId, ownerId]);
+    if (!owned) return null;
+    await c.query('DELETE FROM trip_stops WHERE trip_id=$1 AND day_number=$2', [tripId, day]);
+    for (const s of rows) {
+      await c.query(
+        `INSERT INTO trip_stops (trip_id, day_number, sequence, kind, company_id, break_id, planned_arrival, planned_depart,
+                                 duration_min, leg_distance_m, leg_duration_s, visited, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [tripId, day, s.sequence, s.kind, s.company_id || null, s.break_id || null,
+         s.planned_arrival || null, s.planned_depart || null, s.duration_min,
+         s.leg_distance_m ?? null, s.leg_duration_s ?? null, !!s.visited, s.notes ?? null]);
+    }
+    await c.query(`
+      UPDATE road_trips SET
+        total_distance_m = (SELECT coalesce(sum(leg_distance_m),0)::int FROM trip_stops WHERE trip_id=$1),
+        total_duration_s = (SELECT coalesce(sum(leg_duration_s),0)::int FROM trip_stops WHERE trip_id=$1)
+      WHERE id=$1`, [tripId]);
+    return true;
+  }).then((ok) => ok ? get(ownerId, tripId) : null);
 }
 
 export async function addBreak(ownerId, tripId, d) {

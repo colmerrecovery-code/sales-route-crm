@@ -24,7 +24,19 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org}
       NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
-      CORS_ORIGIN: http://localhost:5173
+      # Mapbox. Unset = the app falls back to the free OpenStreetMap services.
+      # MAPBOX_TOKEN is the SECRET token, used server-side for geocoding and routing.
+      # MAPBOX_PUBLIC_TOKEN is handed to the browser for map tiles — restrict it by URL.
+      MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
+      MAPBOX_PUBLIC_TOKEN: ${MAPBOX_PUBLIC_TOKEN:-}
+      MAPBOX_STYLE: ${MAPBOX_STYLE:-mapbox/streets-v12}
+      # Stored coordinates require Mapbox's permanent licence. Only set this to
+      # false if you are NOT keeping the results.
+      MAPBOX_PERMANENT: ${MAPBOX_PERMANENT:-true}
+      # false = keep address lookup on the free OpenStreetMap services while
+      # routing and tiles use Mapbox. Only address lookup costs money.
+      MAPBOX_GEOCODING: ${MAPBOX_GEOCODING:-true}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       DB_SQL_DIR: /database
     volumes:
       - ./database:/database:ro
@@ -34,8 +46,6 @@ services:
 
   frontend:
     build: ./frontend
-    environment:
-      VITE_API_URL: http://localhost:4000/api
     ports: ["5173:5173"]
     depends_on: [backend]
 
