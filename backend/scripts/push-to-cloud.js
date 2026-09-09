@@ -39,9 +39,36 @@ if (!EMAIL || !PASSWORD) {
   process.exit(1);
 }
 
+// ---------- whose customers ----------
+/* One account, named. This Mac has more than one account with customers in it,
+   and quietly sweeping up all of them would push somebody else's list. */
+async function resolveUser() {
+  const email = opt('user', process.env.CLOUD_LOCAL_USER || '');
+  if (email) {
+    const { rows } = await query('SELECT id, email FROM users WHERE lower(email)=lower($1)', [email]);
+    if (!rows.length) throw new Error(`No account on this Mac with the email ${email}`);
+    return rows[0];
+  }
+  const { rows } = await query(`
+    SELECT u.id, u.email, count(c.id)::int AS companies
+      FROM users u LEFT JOIN companies c ON c.owner_id = u.id
+     WHERE u.email <> 'demo@example.com'
+     GROUP BY u.id, u.email ORDER BY companies DESC`);
+  const withData = rows.filter(r => r.companies > 0);
+  if (withData.length === 1) return withData[0];
+  if (!rows.length) throw new Error('No account here other than the demo login.');
+  const list = rows.map(r => `    ${r.email.padEnd(34)} ${r.companies} customers`).join('\n');
+  throw new Error(`More than one account has customers:\n\n${list}\n\n  Re-run naming the one you mean.`);
+}
+
+let localUser;
+try { localUser = await resolveUser(); }
+catch (e) { console.error(`\n  ${e.message}\n`); await pool.end(); process.exit(1); }
+console.log(`\n  Reading from the account ${localUser.email} on this Mac.`);
+
 // ---------- what to send ----------
-const params = [];
-let where = '1=1';
+const params = [localUser.id];
+let where = 'c.owner_id = $1';
 if (PROVINCES) {
   const { expandProvinces } = await import('../models/companies.js');
   params.push(expandProvinces(PROVINCES));
@@ -53,12 +80,11 @@ const { rows: local } = await query(`
          ST_Y(c.location::geometry) AS lat, ST_X(c.location::geometry) AS lng,
          cu.tier
     FROM companies c
-    JOIN users u ON u.id = c.owner_id
     LEFT JOIN customers cu ON cu.company_id = c.id
-   WHERE u.email <> 'demo@example.com' AND ${where}
+   WHERE ${where}
    ORDER BY c.name`, params);
 
-console.log(`\n  ${local.length} customers on this Mac to consider.`);
+console.log(`  ${local.length} customers on this Mac to consider.`);
 const withPin = local.filter(r => r.lat != null).length;
 console.log(`  ${withPin} already have map coordinates; ${local.length - withPin} do not and will go up without a pin.\n`);
 

@@ -34,7 +34,10 @@ async function resolveUser() {
   const withData = rows.filter(r => r.companies > 0);
   if (withData.length === 1) return withData[0];
   if (!rows.length) throw new Error('No account here other than the demo login.');
-  throw new Error('More than one account has customers. Pass --user with the email you mean.');
+  /* Naming the accounts beats "pick one" -- the whole reason for guessing was
+     to save the person a lookup they cannot easily do. */
+  const list = rows.map(r => `    ${r.email.padEnd(34)} ${r.companies} customers`).join('\n');
+  throw new Error(`More than one account has customers:\n\n${list}\n\n  Re-run naming the one you mean:  --user <email>`);
 }
 
 const csvCell = (v) => {
@@ -42,7 +45,9 @@ const csvCell = (v) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-const user = await resolveUser();
+let user;
+try { user = await resolveUser(); }
+catch (e) { console.error(`\n  ${e.message}\n`); await pool.end(); process.exit(1); }
 
 const { rows } = await query(`
   SELECT c.company_code, c.name, c.address, c.city, c.postal_code, c.phone,
