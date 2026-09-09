@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { api, fmtKm, fmtDur, fmtTime, fmtDate, fmtClock } from '../services/api.js';
+import { api, fmtKm, fmtDur, fmtTime, fmtDate, fmtClock, provinceParam } from '../services/api.js';
 import CrmMap from '../components/CrmMap.jsx';
 import { Code, Tier } from '../components/Badges.jsx';
 import { IconRefresh, IconNav, IconCheck, IconPlus, IconPhone } from '../components/Icons.jsx';
@@ -27,7 +27,9 @@ export default function TripBuilder({ user }) {
   const [stayText, setStayText] = useState('');
 
   const load = () => api.trip(id).then((t) => { setTrip(t); setVisitMin(String(t.default_visit_min)); return t; });
-  useEffect(() => { load(); api.companiesForMap().then(setCandidates); }, [id]);
+  /* Candidates for a stop come from the territory too -- picking a day's
+     visits should never mean scrolling past Alberta. */
+  useEffect(() => { load(); api.companiesForMap({ provinces: provinceParam('territory') }).then(setCandidates); }, [id]);
 
   const customerStops = useMemo(() => trip?.stops.filter((s) => s.kind === 'customer') || [], [trip]);
   const days = useMemo(() => {

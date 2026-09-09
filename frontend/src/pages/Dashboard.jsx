@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, fmtDate, fmtKm } from '../services/api.js';
+import { api, fmtDate, fmtKm, provinceParam } from '../services/api.js';
 import { Code, Ring, TouchPill } from '../components/Badges.jsx';
 import { IconCheck, IconClock, IconFlame, IconRefresh, IconRoute } from '../components/Icons.jsx';
 
@@ -10,9 +10,10 @@ export default function Dashboard() {
   const [leads, setLeads] = useState([]);
   const [trips, setTrips] = useState([]);
   useEffect(() => {
-    api.companyStats().then(setStats);
-    api.companies({ due: 'true' }).then(setDue);
-    api.companies({ tier: 'tier2' }).then(setLeads);
+    const inTerritory = { provinces: provinceParam('territory') };
+    api.companyStats(inTerritory).then(setStats);
+    api.companies({ ...inTerritory, due: 'true' }).then(setDue);
+    api.companies({ ...inTerritory, tier: 'tier2' }).then(setLeads);
     api.trips().then((t) => setTrips(t.filter((x) => ['draft', 'planned', 'in_progress'].includes(x.status)).slice(0, 3)));
   }, []);
   const by = Object.fromEntries(stats.map((s) => [s.tier, s]));

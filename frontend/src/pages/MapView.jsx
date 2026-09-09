@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, TIERS } from '../services/api.js';
+import { api, TIERS, PROVINCES, provinceParam } from '../services/api.js';
 import CrmMap from '../components/CrmMap.jsx';
 import { Code, Tier } from '../components/Badges.jsx';
 import { IconRoute } from '../components/Icons.jsx';
 
 export default function MapView() {
+  /* Opens on the territory, same as the customer list. Four hundred pins in
+     Alberta and BC only make it harder to find the ones worth a visit. */
+  const [prov, setProv] = useState('territory');
   const [filters, setFilters] = useState({ tier: '', city: '', postal_code: '', due: '' });
   const [rows, setRows] = useState([]);
   const [selected, setSelected] = useState(new Set());
@@ -16,7 +19,7 @@ export default function MapView() {
 
   // Pins only need a handful of columns; the full record carries long notes
   // and a dozen dates that never appear on the map.
-  useEffect(() => { api.companiesForMap(filters).then(setRows); }, [filters]);
+  useEffect(() => { api.companiesForMap({ ...filters, provinces: provinceParam(prov) }).then(setRows); }, [filters, prov]);
   useEffect(() => { api.trips().then((t) => setTrips(t.filter((x) => x.status !== 'completed' && x.status !== 'cancelled'))); }, []);
 
   const toggle = (id) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -42,6 +45,11 @@ export default function MapView() {
         <div className="filters">
           <select value={filters.tier} onChange={set('tier')}><option value="">All tiers</option>{Object.entries(TIERS).map(([k, t]) => <option key={k} value={k}>{t.label}</option>)}</select>
           <select value={filters.due} onChange={set('due')}><option value="">Any status</option><option value="true">Overdue only</option></select>
+          <select value={prov} onChange={(e) => setProv(e.target.value)} title="Which provinces to show">
+            <option value="territory">My territory</option>
+            <option value="all">All provinces</option>
+            <optgroup label="One province">{PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}</optgroup>
+          </select>
           <input placeholder="City" value={filters.city} onChange={set('city')} />
           <input placeholder="Postal prefix" value={filters.postal_code} onChange={set('postal_code')} />
         </div>

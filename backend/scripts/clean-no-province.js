@@ -1,0 +1,76 @@
+/**
+ * Remove customer records that have no province.
+ *
+ *   docker compose exec -T backend node scripts/clean-no-province.js --user you@example.com
+ *   docker compose exec -T backend node scripts/clean-no-province.js --user you@example.com --confirm
+ *
+ * Troy's import carried 63 rows with no province and, in almost every case, no
+ * address either -- names like "3G Packaging Corp - (no location)". They cannot
+ * be mapped, cannot be routed, and cannot be visited, so they only pad the list.
+ *
+ * Without --confirm this prints them as CSV and changes nothing, which is what
+ * the launcher saves as a backup before asking to go ahead. Contacts go with
+ * the company (ON DELETE CASCADE), so the CSV records how many are lost.
+ */
+import { pool, query } from '../config/db.js';
+
+const argv = process.argv.slice(2);
+const flag = (n) => argv.includes(`--${n}`);
+const opt = (n, d) => { const i = argv.indexOf(`--${n}`); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
+
+// Which account? Named, or the only one that has customers in it.
+async function resolveUser() {
+  const email = opt('user', null);
+  if (email) {
+    const { rows } = await query('SELECT id, email FROM users WHERE lower(email)=lower($1)', [email]);
+    if (!rows.length) throw new Error(`No account here with the email ${email}`);
+    return rows[0];
+  }
+  const { rows } = await query(`
+    SELECT u.id, u.email, count(c.id)::int AS companies
+      FROM users u LEFT JOIN companies c ON c.owner_id = u.id
+     WHERE u.email <> 'demo@example.com'
+     GROUP BY u.id, u.email ORDER BY companies DESC`);
+  const withData = rows.filter(r => r.companies > 0);
+  if (withData.length === 1) return withData[0];
+  if (!rows.length) throw new Error('No account here other than the demo login.');
+  throw new Error('More than one account has customers. Pass --user with the email you mean.');
+}
+
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+const user = await resolveUser();
+
+const { rows } = await query(`
+  SELECT c.company_code, c.name, c.address, c.city, c.postal_code, c.phone,
+         (SELECT count(*)::int FROM clients cl WHERE cl.company_id = c.id) AS contacts,
+         (SELECT count(*)::int FROM trip_stops ts WHERE ts.company_id = c.id) AS trip_stops
+    FROM companies c
+   WHERE c.owner_id = $1 AND (c.province IS NULL OR btrim(c.province) = '')
+   ORDER BY c.name`, [user.id]);
+
+if (!flag('confirm')) {
+  // CSV on stdout -- the launcher redirects this into a file as the backup.
+  const head = ['Customer Code', 'Company', 'Address', 'City', 'Postal Code', 'Phone', 'Contacts', 'In trips'];
+  console.log(head.join(','));
+  for (const r of rows) {
+    console.log([r.company_code, r.name, r.address, r.city, r.postal_code, r.phone, r.contacts, r.trip_stops].map(csvCell).join(','));
+  }
+  const contacts = rows.reduce((a, r) => a + r.contacts, 0);
+  const inTrips = rows.filter(r => r.trip_stops > 0).length;
+  console.error(`\n  ${user.email}: ${rows.length} companies with no province, holding ${contacts} contacts.`);
+  if (inTrips) console.error(`  WARNING: ${inTrips} of them are stops on a trip and would be dropped from it.`);
+  console.error('  Nothing has been changed. Add --confirm to remove them.\n');
+  await pool.end();
+  process.exit(0);
+}
+
+const { rowCount } = await query(
+  `DELETE FROM companies WHERE owner_id = $1 AND (province IS NULL OR btrim(province) = '')`, [user.id]);
+const { rows: [left] } = await query('SELECT count(*)::int AS n FROM companies WHERE owner_id=$1', [user.id]);
+console.log(`\n  Removed ${rowCount} companies with no province from ${user.email}.`);
+console.log(`  ${left.n} customers remain.\n`);
+await pool.end();

@@ -1,14 +1,60 @@
 import { query } from '../config/db.js';
 
+/* Province filtering.
+ *
+ * A rep covers a territory, not a country. Troy's list carries 956 locations
+ * from Victoria to St John's while he is responsible for six provinces, so
+ * every screen was showing him four hundred customers he will never visit.
+ *
+ * The stored value is whatever the source system wrote -- full names in
+ * Troy's case -- so a filter has to accept the short forms a person would
+ * type as well. Everything is compared lowercased and trimmed; no unaccent
+ * extension is assumed, hence the explicit accented spellings.
+ */
+const PROVINCE_ALIASES = {
+  'ontario': ['ontario', 'on', 'ont'],
+  'quebec': ['quebec', 'québec', 'qc', 'pq', 'que'],
+  'new brunswick': ['new brunswick', 'nb', 'nouveau-brunswick'],
+  'nova scotia': ['nova scotia', 'ns', 'nouvelle-écosse'],
+  'prince edward island': ['prince edward island', 'pe', 'pei', 'île-du-prince-édouard'],
+  'newfoundland and labrador': ['newfoundland and labrador', 'newfoundland', 'nl', 'nf', 'nfld'],
+  'manitoba': ['manitoba', 'mb', 'man'],
+  'saskatchewan': ['saskatchewan', 'sk', 'sask'],
+  'alberta': ['alberta', 'ab', 'alta'],
+  'british columbia': ['british columbia', 'bc', 'colombie-britannique'],
+  'yukon': ['yukon', 'yt'],
+  'northwest territories': ['northwest territories', 'nt', 'nwt'],
+  'nunavut': ['nunavut', 'nu'],
+};
+
+/* "Ontario,QC" -> every spelling of both, ready for = ANY(). An unrecognised
+   value is passed through as typed rather than dropped, so a filter on a
+   US state still does something sensible. */
+export function expandProvinces(csv) {
+  const out = new Set();
+  for (const raw of String(csv).split(',')) {
+    const v = raw.trim().toLowerCase();
+    if (!v) continue;
+    const key = Object.keys(PROVINCE_ALIASES).find(k => k === v || PROVINCE_ALIASES[k].includes(v));
+    if (key) PROVINCE_ALIASES[key].forEach(a => out.add(a));
+    else out.add(v);
+  }
+  return [...out];
+}
+
 const cols = `id, owner_id, company_code, name, address, city, postal_code, province, country, phone, website, notes,
   created_at, updated_at, tier, temperature, last_contact_at, last_purchase_at, next_touch_due, annual_value, lat, lng, inactive_365`;
 
-export async function list(ownerId, { tier, temperature, city, postal_code, q, near, radius_km, due, limit, offset, fields } = {}) {
+export async function list(ownerId, { tier, temperature, city, postal_code, province, provinces, q, near, radius_km, due, limit, offset, fields } = {}) {
   const where = ['owner_id = $1']; const params = [ownerId];
   const add = (sql, v) => { params.push(v); where.push(sql.replace('?', `$${params.length}`)); };
   if (tier) add('tier = ?', tier);
   if (temperature) add('temperature = ?', temperature);
   if (city) add('lower(city) = lower(?)', city);
+  /* provinces=all (or absent) means no restriction; the UI sends the rep's
+     own list by default. `province` is kept as a single-value alias. */
+  const provList = provinces && provinces !== 'all' ? provinces : (province && province !== 'all' ? province : null);
+  if (provList) add('lower(btrim(province)) = ANY(?)', expandProvinces(provList));
   if (postal_code) add("upper(replace(postal_code,' ','')) LIKE upper(replace(?,' ',''))||'%'", postal_code);
   if (q) { params.push(`%${q}%`); where.push(`(name ILIKE $${params.length} OR company_code ILIKE $${params.length})`); }
   if (due === 'true') where.push('next_touch_due <= CURRENT_DATE');
@@ -88,10 +134,15 @@ export async function remove(ownerId, id) {
   return rowCount > 0;
 }
 
-export async function stats(ownerId) {
+/* Same territory rule as the list. Counting customers he does not cover would
+   make the dashboard disagree with every screen it links to. */
+export async function stats(ownerId, { provinces } = {}) {
+  const params = [ownerId];
+  let extra = '';
+  if (provinces && provinces !== 'all') { params.push(expandProvinces(provinces)); extra = ` AND lower(btrim(province)) = ANY($${params.length})`; }
   const { rows } = await query(`
     SELECT tier, count(*)::int AS count, coalesce(sum(annual_value),0)::float AS value,
            count(*) FILTER (WHERE next_touch_due <= CURRENT_DATE)::int AS due
-    FROM company_overview WHERE owner_id=$1 GROUP BY tier`, [ownerId]);
+    FROM company_overview WHERE owner_id=$1${extra} GROUP BY tier`, params);
   return rows;
 }

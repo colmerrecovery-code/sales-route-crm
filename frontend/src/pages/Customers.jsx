@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, TIERS, fmtDate, daysAgo } from '../services/api.js';
+import { api, TIERS, PROVINCES, provinceParam, fmtDate, daysAgo } from '../services/api.js';
 import { Code, Tier, Temp, Field, Drawer, TouchPill } from '../components/Badges.jsx';
 import { IconPlus, IconPhone, IconNav } from '../components/Icons.jsx';
 
@@ -116,7 +116,10 @@ export default function Customers({ user, onUserChange }) {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
-  const filters = { tier: params.get('tier') || '', temperature: params.get('temperature') || '', city: params.get('city') || '', postal_code: params.get('postal_code') || '', q: params.get('q') || '', due: params.get('due') || '' };
+  /* No ?prov in the URL means the territory, not the country. That default is
+     the whole point: the list opens on the customers he can actually visit. */
+  const prov = params.get('prov') || 'territory';
+  const filters = { tier: params.get('tier') || '', temperature: params.get('temperature') || '', city: params.get('city') || '', postal_code: params.get('postal_code') || '', q: params.get('q') || '', due: params.get('due') || '', provinces: provinceParam(prov) };
 
   /* Load one page at a time. Drawing all 956 at once locked the phone up for
      several seconds; 50 renders instantly and most searches never need more. */
@@ -140,7 +143,7 @@ export default function Customers({ user, onUserChange }) {
   return (
     <div className="page">
       <div className="page-head">
-        <div><div className="eyebrow">{total ? (rows.length < total ? `${rows.length} of ${total} companies` : `${total} companies`) : 'Companies'}</div><h1>Customers</h1></div>
+        <div><div className="eyebrow">{total ? (rows.length < total ? `${rows.length} of ${total} companies` : `${total} companies`) : 'Companies'}{prov === 'territory' ? ' in your territory' : prov === 'all' ? ' across Canada' : ` in ${prov}`}</div><h1>Customers</h1></div>
         <button className="btn primary hide-mobile" onClick={() => setEditing({ ...blank })}><IconPlus />Add company</button>
       </div>
 
@@ -155,6 +158,11 @@ export default function Customers({ user, onUserChange }) {
           <option value="">Any temperature</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option>
         </select>
         <select value={filters.due} onChange={(e) => setFilter('due', e.target.value)}><option value="">Any status</option><option value="true">Overdue only</option></select>
+        <select value={prov} onChange={(e) => setFilter('prov', e.target.value)} title="Which provinces to show">
+          <option value="territory">My territory</option>
+          <option value="all">All provinces</option>
+          <optgroup label="One province">{PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}</optgroup>
+        </select>
         <input placeholder="City" value={filters.city} onChange={(e) => setFilter('city', e.target.value)} />
         <input placeholder="Postal code" value={filters.postal_code} onChange={(e) => setFilter('postal_code', e.target.value)} />
       </div>

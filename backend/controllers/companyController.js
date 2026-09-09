@@ -19,7 +19,7 @@ export const companyPatchSchema = companySchema.partial();
 const addressChanged = (d) => ['address', 'city', 'postal_code', 'province', 'country'].some(k => k in d);
 
 export async function list(req, res) { res.json(await Companies.list(req.user.id, req.query)); }
-export async function stats(req, res) { res.json(await Companies.stats(req.user.id)); }
+export async function stats(req, res) { res.json(await Companies.stats(req.user.id, req.query)); }
 
 export async function get(req, res) {
   const company = await Companies.get(req.user.id, req.params.id);

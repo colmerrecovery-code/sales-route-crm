@@ -53,7 +53,7 @@ export const api = {
   companies: (filters) => request('GET', `/companies${qs(filters)}`),
   companiesPage: (filters, limit, offset) => request('GET', `/companies${qs({ ...filters, limit, offset })}`),
   companiesForMap: (filters) => request('GET', `/companies${qs({ ...filters, fields: 'map' })}`),
-  companyStats: () => request('GET', '/companies/stats'),
+  companyStats: (filters) => request('GET', `/companies/stats${qs(filters || {})}`),
   company: (id) => request('GET', `/companies/${id}`),
   createCompany: (d) => request('POST', '/companies', d),
   updateCompany: (id, d) => request('PATCH', `/companies/${id}`, d),
@@ -87,6 +87,29 @@ export const TIERS = {
   tier3: { label: 'Inactive', short: 'T3', hint: 'No purchase in 365+ days' },
   tier4: { label: 'Cold lead', short: 'T4', hint: 'Met cold-calling · low priority' },
 };
+/* The rep's territory.
+ *
+ * The customer list is national -- 956 locations from Victoria to St John's --
+ * but a rep is responsible for a slice of it. Everything defaults to that
+ * slice so the screens show the customers he can actually visit; "All
+ * provinces" is always one tap away for the times somebody asks about an
+ * account out west.
+ *
+ * Hard-coded for now because there is one rep using this. When GoMichi is
+ * sold to somebody else this belongs on the user record, set once when they
+ * sign up -- the API already takes any list of provinces.
+ */
+export const TERRITORY = ['Ontario', 'Quebec', 'New Brunswick', 'Nova Scotia', 'Prince Edward Island', 'Newfoundland and Labrador'];
+
+export const PROVINCES = [
+  'Ontario', 'Quebec', 'New Brunswick', 'Nova Scotia', 'Prince Edward Island', 'Newfoundland and Labrador',
+  'Manitoba', 'Saskatchewan', 'Alberta', 'British Columbia', 'Yukon', 'Northwest Territories', 'Nunavut',
+];
+
+/* What the filter sends to the API for a given choice. */
+export const provinceParam = (choice) =>
+  choice === 'all' ? 'all' : choice === 'territory' ? TERRITORY.join(',') : choice;
+
 export const fmtKm = (m) => m == null ? '—' : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
 export const fmtDur = (s) => { if (s == null) return '—'; const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h ? `${h}h ${m}m` : `${m}m`; };
 /* 12-hour everywhere, by preference. Built by hand rather than left to
