@@ -14,16 +14,20 @@ databases:
   - name: gomichi-db
     databaseName: gomichi
     user: gomichi
-    plan: 0.1c-256mb        # smallest paid Postgres; check price on the confirm screen
+    # FREE while Troy tries it. Render deletes a free database 30 days after
+    # creation, so upgrade (dashboard, or change this to 0.1c-256mb) before
+    # there is anything in here worth keeping.
+    plan: free
     postgresMajorVersion: "16"
 
 services:
   - type: web
     name: gomichi
     runtime: node
-    plan: 0.5c-512mb           # NOT free: free instances sleep, and a cold
-                               # start in a customer's car park is the one
-                               # place this must not happen
+    # FREE while Troy tries it. A free instance sleeps after 15 minutes idle
+    # and takes ~50s to wake, which is unacceptable in a customer's car park
+    # -- upgrade to 0.5c-512mb once the app has proved itself.
+    plan: free
     region: ohio
     branch: main
     # Build the front end first, then install the server's dependencies.
