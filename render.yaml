@@ -14,10 +14,9 @@ databases:
   - name: gomichi-db
     databaseName: gomichi
     user: gomichi
-    # FREE while Troy tries it. Render deletes a free database 30 days after
-    # creation, so upgrade (dashboard, or change this to 0.1c-256mb) before
-    # there is anything in here worth keeping.
-    plan: free
+    # Paid from Sept 8 2026 ($6/month). The free tier deletes a database 30 days
+    # after creation, which is no way to hold real customer data.
+    plan: 0.1c-256mb
     postgresMajorVersion: "16"
     # Same region as the web service. A database in another region cannot be
     # reached over Render's internal network, so the app would never connect.
@@ -27,10 +26,10 @@ services:
   - type: web
     name: gomichi
     runtime: node
-    # FREE while Troy tries it. A free instance sleeps after 15 minutes idle
-    # and takes ~50s to wake, which is unacceptable in a customer's car park
-    # -- upgrade to 0.5c-512mb once the app has proved itself.
-    plan: free
+    # Paid from Sept 8 2026 ($7/month). A free instance sleeps after 15 minutes
+    # idle and takes ~50s to wake, which is unacceptable in a customer's car
+    # park -- this plan stays awake.
+    plan: 0.5c-512mb
     region: ohio
     branch: main
     # Build the front end first, then install the server's dependencies.
