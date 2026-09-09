@@ -1,16 +1,18 @@
 /**
- * Remove customer records that have no province.
+ * Remove customer records that cannot be visited.
  *
- *   docker compose exec -T backend node scripts/clean-no-province.js --user you@example.com
- *   docker compose exec -T backend node scripts/clean-no-province.js --user you@example.com --confirm
+ *   docker compose exec -T backend node scripts/clean-incomplete.js --user you@example.com
+ *   docker compose exec -T backend node scripts/clean-incomplete.js --user you@example.com --confirm
  *
- * Troy's import carried 63 rows with no province and, in almost every case, no
- * address either -- names like "3G Packaging Corp - (no location)". They cannot
- * be mapped, cannot be routed, and cannot be visited, so they only pad the list.
+ * A record with no street address, no city, or no province cannot be put on a
+ * map or slotted into a day, so it sits in the list forever taking up room --
+ * "Acart Equipment - (no location)" and 212 others like it. Garbage in,
+ * garbage out.
  *
  * Without --confirm this prints them as CSV and changes nothing, which is what
  * the launcher saves as a backup before asking to go ahead. Contacts go with
- * the company (ON DELETE CASCADE), so the CSV records how many are lost.
+ * the company (ON DELETE CASCADE), so the CSV records how many are lost, and
+ * the CSV is the only way back -- keep it.
  */
 import { pool, query } from '../config/db.js';
 
@@ -40,6 +42,15 @@ async function resolveUser() {
   throw new Error(`More than one account has customers:\n\n${list}\n\n  Re-run naming the one you mean:  --user <email>`);
 }
 
+/* Missing any one of the three and the record is not a place you can drive to.
+   Written once and used by both the listing and the delete so they can never
+   disagree about what is about to go. */
+const INCOMPLETE = `(
+     c.address  IS NULL OR btrim(c.address)  = ''
+  OR c.city     IS NULL OR btrim(c.city)     = ''
+  OR c.province IS NULL OR btrim(c.province) = ''
+)`;
+
 const csvCell = (v) => {
   const s = v == null ? '' : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -54,7 +65,7 @@ const { rows } = await query(`
          (SELECT count(*)::int FROM clients cl WHERE cl.company_id = c.id) AS contacts,
          (SELECT count(*)::int FROM trip_stops ts WHERE ts.company_id = c.id) AS trip_stops
     FROM companies c
-   WHERE c.owner_id = $1 AND (c.province IS NULL OR btrim(c.province) = '')
+   WHERE c.owner_id = $1 AND ${INCOMPLETE}
    ORDER BY c.name`, [user.id]);
 
 if (!flag('confirm')) {
@@ -66,7 +77,7 @@ if (!flag('confirm')) {
   }
   const contacts = rows.reduce((a, r) => a + r.contacts, 0);
   const inTrips = rows.filter(r => r.trip_stops > 0).length;
-  console.error(`\n  ${user.email}: ${rows.length} companies with no province, holding ${contacts} contacts.`);
+  console.error(`\n  ${user.email}: ${rows.length} customers with no address, city or province, holding ${contacts} contacts.`);
   if (inTrips) console.error(`  WARNING: ${inTrips} of them are stops on a trip and would be dropped from it.`);
   console.error('  Nothing has been changed. Add --confirm to remove them.\n');
   await pool.end();
@@ -74,8 +85,8 @@ if (!flag('confirm')) {
 }
 
 const { rowCount } = await query(
-  `DELETE FROM companies WHERE owner_id = $1 AND (province IS NULL OR btrim(province) = '')`, [user.id]);
+  `DELETE FROM companies c WHERE c.owner_id = $1 AND ${INCOMPLETE}`, [user.id]);
 const { rows: [left] } = await query('SELECT count(*)::int AS n FROM companies WHERE owner_id=$1', [user.id]);
-console.log(`\n  Removed ${rowCount} companies with no province from ${user.email}.`);
+console.log(`\n  Removed ${rowCount} incomplete customers from ${user.email}.`);
 console.log(`  ${left.n} customers remain.\n`);
 await pool.end();
