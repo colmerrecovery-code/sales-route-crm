@@ -19,6 +19,9 @@ databases:
     # there is anything in here worth keeping.
     plan: free
     postgresMajorVersion: "16"
+    # Same region as the web service. A database in another region cannot be
+    # reached over Render's internal network, so the app would never connect.
+    region: ohio
 
 services:
   - type: web
@@ -31,7 +34,10 @@ services:
     region: ohio
     branch: main
     # Build the front end first, then install the server's dependencies.
-    buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
+    # --include=dev is essential: NODE_ENV=production below makes npm skip
+    # devDependencies, and vite (the front-end build tool) lives there. Without
+    # it the build dies with "vite: not found".
+    buildCommand: cd frontend && npm install --include=dev && npm run build && cd ../backend && npm install
     # cwd becomes backend/, which is what makes ../frontend/dist and
     # ../database/migrations resolve without hard-coded paths.
     startCommand: cd backend && node server.js
