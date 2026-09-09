@@ -25,6 +25,8 @@ export default function TripBuilder({ user }) {
   const [durStop, setDurStop] = useState(null);   // one stop whose length is being overridden
   const [stayDay, setStayDay] = useState(null);   // which night's lodging is being edited
   const [stayText, setStayText] = useState('');
+  const [hoursOpen, setHoursOpen] = useState(false); // the day's working hours being edited
+  const [hours, setHours] = useState({ start: '', end: '' });
 
   const load = () => api.trip(id).then((t) => { setTrip(t); setVisitMin(String(t.default_visit_min)); return t; });
   /* Candidates for a stop come from the territory too -- picking a day's
@@ -145,6 +147,20 @@ export default function TripBuilder({ user }) {
     setMsg({ ok: true, text: `Visits set to ${n} min on ${r.changed} stop${r.changed === 1 ? '' : 's'}. Hit Recalculate on each day to re-time it.` });
   });
 
+  /* The day's working hours, changed mid-trip. Starting an hour earlier is how
+     an extra stop fits, and the backend has accepted new hours all along
+     (PATCH /trips) — there was just no way to say so from this screen. Same
+     contract as the visit length: apply, then re-time — nothing is re-planned
+     behind your back. */
+  const applyHours = () => act(async () => {
+    const { start, end } = hours;
+    if (!start || !end) throw new Error('Give both a start and an end time.');
+    if (end <= start) throw new Error('The day has to end after it starts.');
+    await api.updateTrip(id, { work_start: start, work_end: end });
+    setHoursOpen(false);
+    setMsg({ ok: true, text: `Hours set to ${fmtClock(start)} – ${fmtClock(end)}. Hit ${trip.total_distance_m ? 'Rebuild route' : 'Build route'} to re-time the whole trip, or Recalculate on a single day.` });
+  });
+
   /* One stop that doesn't match the rest — a real meeting among the drop-ins. */
   const setStopMinutes = (stop, mins) => act(async () => {
     const n = Number(mins);
@@ -201,7 +217,16 @@ export default function TripBuilder({ user }) {
     <div className="page" style={{ maxWidth: 1400 }}>
       <div className="page-head">
         <div>
-          <div className="eyebrow"><Link to="/trips" className="link">Road trips</Link> · {fmtDate(trip.start_date)}{trip.end_date ? ` – ${fmtDate(trip.end_date)}` : ''} · {fmtClock(trip.work_start)} – {fmtClock(trip.work_end)}</div>
+          <div className="eyebrow"><Link to="/trips" className="link">Road trips</Link> · {fmtDate(trip.start_date)}{trip.end_date ? ` – ${fmtDate(trip.end_date)}` : ''} ·{' '}
+            <button type="button" className="linklike" disabled={busy}
+              title="Change what time the day starts and ends"
+              onClick={() => {
+                setHours({ start: (trip.work_start || '08:30').slice(0, 5), end: (trip.work_end || '17:00').slice(0, 5) });
+                setHoursOpen((v) => !v);
+              }}>
+              {fmtClock(trip.work_start)} – {fmtClock(trip.work_end)} ✎
+            </button>
+          </div>
           <h1>{trip.name}</h1>
         </div>
         <div className="row">
@@ -231,6 +256,18 @@ export default function TripBuilder({ user }) {
           <button className="btn primary" disabled={busy || customerStops.length < 1} onClick={optimize}><IconRefresh />{busy ? 'Working…' : (trip.total_distance_m ? 'Rebuild route' : 'Build route')}</button>
         </div>
       </div>
+      {hoursOpen && (
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 14, flexWrap: 'wrap' }}>
+          <span className="small muted">The day runs from</span>
+          <input type="time" value={hours.start} disabled={busy}
+            onChange={(e) => setHours((h) => ({ ...h, start: e.target.value }))} />
+          <span className="small muted">to</span>
+          <input type="time" value={hours.end} disabled={busy}
+            onChange={(e) => setHours((h) => ({ ...h, end: e.target.value }))} />
+          <button className="btn sm primary" disabled={busy} onClick={applyHours}>Apply</button>
+          <button className="btn sm" disabled={busy} onClick={() => setHoursOpen(false)}>Cancel</button>
+        </div>
+      )}
       {msg && <div className={`alert ${msg.ok ? 'ok' : ''}`} style={{ marginBottom: 14 }}>{msg.text}</div>}
       {!start && (
         <div className="alert warn" style={{ marginBottom: 14 }}>
