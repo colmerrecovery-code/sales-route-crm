@@ -163,8 +163,12 @@ tr.clickable:hover td { background: var(--card-2); }
 .map-page { display: grid; grid-template-rows: 1fr auto; height: calc(100vh - var(--tab-h) - var(--safe-b)); }
 .map-side { order: 2; background: var(--panel); border-top: 1px solid var(--line); padding: 14px 16px; max-height: 46vh; overflow: auto; }
 .map-wrap { order: 1; position: relative; min-height: 220px; }
-.leaflet-container { height: 100%; width: 100%; background: #0E1626; }
-.leaflet-tile { filter: brightness(.9) invert(1) contrast(2.4) hue-rotate(200deg) saturate(.4) brightness(.95); }
+.leaflet-container { height: 100%; width: 100%; background: #E8E4DD; }
+/* No tile filter. The tiles are drawn as Mapbox designed them - roads, shields
+   and place names stay legible. An inverted dark map matched the app's theme
+   but made the detail unreadable, which is the opposite of what a map is for. */
+.leaflet-control-attribution { background: rgba(255,255,255,.75); color: #333; }
+.leaflet-control-attribution a { color: #0B6E70; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--card); color: var(--text); border: 1px solid var(--line); }
 .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
 .leaflet-bar a { background: var(--card); color: var(--text); border-bottom-color: var(--line); }
@@ -172,6 +176,8 @@ tr.clickable:hover td { background: var(--card-2); }
 .pin.tier1 { background: var(--green); } .pin.tier2 { background: var(--orange); } .pin.tier3 { background: var(--muted); } .pin.tier4 { background: var(--blue); }
 .pin.start { background: var(--cyan); border-color: var(--bg); }
 .pin.selected { box-shadow: 0 0 0 4px var(--cyan); }
+/* Tier 3 uses the pale --muted grey, which vanishes on a light map. */
+.leaflet-container .pin.tier3 { background: #5C6B82; }
 .pin-num { width: 24px; height: 24px; border-radius: 50%; background: var(--cyan); color: var(--ink-on-accent); font: 800 12px var(--display); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 4px var(--cyan-dim), 0 2px 6px rgba(0,0,0,.5); }
 .pin-num.done { background: var(--green); box-shadow: 0 0 0 4px var(--green-dim), 0 2px 6px rgba(0,0,0,.5); }
 .picker { max-height: 50vh; overflow: auto; }
