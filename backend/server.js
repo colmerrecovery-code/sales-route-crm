@@ -14,7 +14,26 @@ import { pool } from './config/db.js';
 import { runMigrations } from './scripts/migrate.js';
 
 const app = express();
-app.use(helmet());
+
+/* Helmet's default Content-Security-Policy is img-src 'self' data: and
+   default-src 'self'. Map tiles are images fetched from api.mapbox.com, so the
+   browser refused every one of them and the map rendered as an empty background
+   with only our own pins on it. It never showed up locally because the Vite dev
+   server hands out the page there and never sees this header - only the Render
+   build, where Express serves the front end too, is affected.
+
+   So: keep every other Helmet default, and name Mapbox explicitly. */
+const MAPBOX = ['https://api.mapbox.com', 'https://events.mapbox.com'];
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'img-src': ["'self'", 'data:', 'blob:', ...MAPBOX],
+      'connect-src': ["'self'", ...MAPBOX],
+      'worker-src': ["'self'", 'blob:'],
+    },
+  },
+}));
 app.use(cors({ origin: (process.env.CORS_ORIGIN || '*').split(',') }));
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
