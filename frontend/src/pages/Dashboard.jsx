@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, fmtDate, fmtKm, fmtDur, fmtTime, provinceParam } from '../services/api.js';
 import { Code, Ring, TouchPill } from '../components/Badges.jsx';
-import { IconCheck, IconClock, IconFlame, IconNav, IconRefresh, IconRoute } from '../components/Icons.jsx';
+import { IconCheck, IconClock, IconFlame, IconNav, IconPhone, IconRefresh, IconRoute } from '../components/Icons.jsx';
 
 /* Today, as the calendar on the wall has it. Trip dates are plain dates stored
    at midnight UTC, so they are compared as YYYY-MM-DD strings rather than as
@@ -23,6 +23,16 @@ export default function Dashboard() {
   const [trips, setTrips] = useState([]);
   const [todayRoute, setTodayRoute] = useState(null); // { trip, day, stops } when a trip covers today
   const [busyStop, setBusyStop] = useState(null);
+  /* Logging a touch from this page. Nothing on the Today page counts until
+     touches actually get logged, and they only get logged if it takes seconds:
+     type three letters, tap the name, tap Call. */
+  const [pool, setPool] = useState(null);      // customers to search, loaded on first use
+  const [loadingPool, setLoadingPool] = useState(false);
+  const [find, setFind] = useState('');
+  const [who, setWho] = useState(null);        // the company picked
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [logged, setLogged] = useState(null);
 
   /* Which trip, if any, is today's.
      Prefer one already under way, then the earliest that covers today. An
@@ -63,6 +73,43 @@ export default function Dashboard() {
     api.companies({ ...inTerritory, tier: 'tier2' }).then(setLeads);
     loadTrips();
   }, []);
+
+  const refreshTouchNumbers = () => {
+    const inTerritory = { provinces: provinceParam('territory') };
+    api.companyStats(inTerritory).then(setStats);
+    api.companies({ ...inTerritory, due: 'true' }).then(setDue);
+  };
+
+  /* The search list is the territory, fetched once on first use rather than on
+     every visit to this page. */
+  const loadPool = () => {
+    if (pool || loadingPool) return;
+    setLoadingPool(true);
+    api.companiesForMap({ provinces: provinceParam('territory') })
+      .then((p) => setPool(p))
+      .finally(() => setLoadingPool(false));
+  };
+
+  const matches = (() => {
+    const q = find.trim().toLowerCase();
+    if (!q || !pool) return [];
+    return pool.filter((c) => `${c.name} ${c.city || ''} ${c.company_code || ''}`.toLowerCase().includes(q)).slice(0, 6);
+  })();
+
+  /* One tap saves it. The database trigger on interactions moves the account's
+     last-contact date and its next touch date, so the tiles above are stale the
+     moment this returns - hence the refresh. */
+  const saveTouch = async (kind) => {
+    setSaving(true);
+    try {
+      await api.logInteraction(who.id, { kind, summary: note.trim() || null });
+      setLogged(`${kind === 'visit' ? 'Visit' : kind === 'call' ? 'Call' : 'Email'} logged for ${who.name}.`);
+      setWho(null); setNote(''); setFind('');
+      refreshTouchNumbers();
+    } catch (e) {
+      setLogged(`Couldn't log that: ${e.message}`);
+    } finally { setSaving(false); }
+  };
 
   /* Ticking a stop off from here, rather than making him open the trip to do
      it. Same call the trip page makes. */
@@ -149,6 +196,70 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+
+      {/* Log a touch. Deliberately the first thing under the route: it is the
+          only thing on this page that puts data IN, and everything else here is
+          computed from it. */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head">
+          <h2>Log a call or visit</h2>
+          <Link className="link" to="/customers">All customers &rarr;</Link>
+        </div>
+
+        {who ? (
+          <div>
+            <div className="li-row" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Code>{who.company_code}</Code>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="name">{who.name}</div>
+                <div className="small muted">{who.city}</div>
+              </div>
+              <button className="btn sm ghost" disabled={saving} onClick={() => { setWho(null); setNote(''); }}>Change</button>
+            </div>
+            <input
+              placeholder="What happened? (optional one-liner)"
+              value={note} disabled={saving}
+              onChange={(e) => setNote(e.target.value)}
+              style={{ width: '100%', margin: '10px 0' }} />
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn primary" disabled={saving} onClick={() => saveTouch('visit')}><IconCheck />Visit</button>
+              <button className="btn" disabled={saving} onClick={() => saveTouch('call')}><IconPhone />Call</button>
+              <button className="btn" disabled={saving} onClick={() => saveTouch('email')}>Email</button>
+              <span className="small muted">{saving ? 'Saving\u2026' : 'One tap saves it and sets the next touch date.'}</span>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <input
+              placeholder="Search a customer by name, city or code"
+              value={find}
+              onFocus={loadPool}
+              onChange={(e) => { loadPool(); setFind(e.target.value); setLogged(null); }}
+              style={{ width: '100%' }} />
+            {find.trim() && (
+              <p className="small muted" style={{ margin: '8px 0 0' }}>
+                {loadingPool ? 'Loading your customers\u2026'
+                  : matches.length ? `${matches.length} match${matches.length === 1 ? '' : 'es'}`
+                  : 'Nothing matches that.'}
+              </p>
+            )}
+            {matches.map((c) => (
+              <button key={c.id} className="li-row" onClick={() => setWho(c)}
+                style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', background: 'none', border: 0,
+                         borderTop: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left', color: 'inherit' }}>
+                <Code>{c.company_code}</Code>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="name">{c.name}</div>
+                  <div className="small muted">{c.city}</div>
+                </div>
+                <span className="muted">&rsaquo;</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {logged && <p className={logged.startsWith("Couldn't") ? 'small bad' : 'small good'} style={{ margin: '10px 0 0' }}>{logged}</p>}
+      </div>
 
       <div className="stats">
         <Link to="/customers?tier=tier1" className="stat">
