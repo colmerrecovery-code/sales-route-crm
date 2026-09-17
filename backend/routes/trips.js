@@ -22,6 +22,9 @@ r.delete('/:id/days/:day/base', c.clearDayBase);
 
 r.patch('/:id/visit-length', validate(c.visitLengthSchema), c.setVisitLength);
 
+// Move the trip to different dates, taking every planned stop time with it.
+r.patch('/:id/dates', validate(c.tripDatesSchema), c.setDates);
+
 r.post('/:id/optimize', c.optimize);
 r.post('/:id/replan', validate(c.replanSchema), c.replan);
 r.get('/:id/directions', c.getDirections);

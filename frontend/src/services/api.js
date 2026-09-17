@@ -75,6 +75,7 @@ export const api = {
   optimize: (id, round_trip = true, home_each_night = true) => request('POST', `/trips/${id}/optimize`, { round_trip, home_each_night }),
   replan: (id, body) => request('POST', `/trips/${id}/replan`, body),
   setVisitLength: (id, minutes) => request('PATCH', `/trips/${id}/visit-length`, { minutes }),
+  setTripDates: (id, d) => request('PATCH', `/trips/${id}/dates`, d),
   // Where a day starts. Day N's base is also where day N-1 finishes.
   setDayBase: (id, day, d) => request('PUT', `/trips/${id}/days/${day}/base`, d),
   clearDayBase: (id, day) => request('DELETE', `/trips/${id}/days/${day}/base`),

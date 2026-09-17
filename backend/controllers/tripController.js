@@ -26,6 +26,26 @@ export async function setVisitLength(req, res) {
   res.json({ ...r.trip, changed: r.changed, minutes: req.body.minutes });
 }
 
+export const tripDatesSchema = z.object({
+  start_date: date,
+  end_date: date.nullish(),
+}).refine((d) => !d.end_date || d.end_date >= d.start_date, {
+  message: 'The trip has to end on or after it starts.', path: ['end_date'],
+});
+
+/**
+ * PATCH /trips/:id/dates - move the trip to different days.
+ *
+ * Kept apart from the general PATCH because this one is not just two columns:
+ * it slides every planned stop time by the same number of days. See
+ * Trips.setDates for why that has to happen together.
+ */
+export async function setDates(req, res) {
+  const r = await Trips.setDates(req.user.id, req.params.id, req.body);
+  if (!r) return notFound(res);
+  res.json({ ...r.trip, shifted_days: r.shift, moved: r.moved, previous_start: r.was });
+}
+
 export const replanSchema = z.object({
   lat: z.number().optional(), lng: z.number().optional(),
   day: z.number().int().positive().optional(),

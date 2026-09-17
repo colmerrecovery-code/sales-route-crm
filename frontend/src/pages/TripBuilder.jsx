@@ -27,6 +27,8 @@ export default function TripBuilder({ user }) {
   const [stayText, setStayText] = useState('');
   const [hoursOpen, setHoursOpen] = useState(false); // the day's working hours being edited
   const [hours, setHours] = useState({ start: '', end: '' });
+  const [datesOpen, setDatesOpen] = useState(false); // the trip being moved to other dates
+  const [dates, setDates] = useState({ start: '', end: '' });
 
   const load = () => api.trip(id).then((t) => { setTrip(t); setVisitMin(String(t.default_visit_min)); return t; });
   /* Candidates for a stop come from the territory too -- picking a day's
@@ -161,6 +163,37 @@ export default function TripBuilder({ user }) {
     setMsg({ ok: true, text: `Hours set to ${fmtClock(start)} – ${fmtClock(end)}. Hit ${trip.total_distance_m ? 'Rebuild route' : 'Build route'} to re-time the whole trip, or Recalculate on a single day.` });
   });
 
+  /* Move the whole trip to different days — the one you planned for Tuesday and
+     couldn't get to. The plan travels with it: same stops, same order, same
+     times of day, new dates. Nothing is re-routed, because nothing about the
+     driving changed — only the calendar did. */
+  const dayShift = (from, to) =>
+    Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
+
+  /* Changing the start drags the end along by the same number of days, so a
+     4-day trip stays 4 days. It's still editable afterwards if the trip is
+     genuinely getting longer or shorter. */
+  const onStartDate = (v) => setDates((d) => {
+    const base = (trip?.start_date || '').slice(0, 10);
+    if (!v || !d.end || !base) return { ...d, start: v };
+    const moved = new Date(Date.parse(`${d.end}T00:00:00Z`) + dayShift(base, v) * 86400000);
+    return { start: v, end: moved.toISOString().slice(0, 10) };
+  });
+
+  const applyDates = () => act(async () => {
+    const { start, end } = dates;
+    if (!start) throw new Error('Pick the new start date.');
+    if (end && end < start) throw new Error('The trip has to end on or after it starts.');
+    const r = await api.setTripDates(id, { start_date: start, end_date: end || null });
+    setDatesOpen(false);
+    const n = r.shifted_days;
+    setMsg({ ok: true, text: n === 0
+      ? `Dates saved — the trip still starts ${fmtDate(start)}.`
+      : `Trip moved ${Math.abs(n)} day${Math.abs(n) === 1 ? '' : 's'} ${n > 0 ? 'later' : 'earlier'}: it now starts ${fmtDate(start)}`
+        + `${r.end_date ? ` and ends ${fmtDate(r.end_date)}` : ''}. `
+        + `${r.moved} stop time${r.moved === 1 ? '' : 's'} moved with it — same stops, same order, same times of day, so there's nothing to rebuild.` });
+  });
+
   /* One stop that doesn't match the rest — a real meeting among the drop-ins. */
   const setStopMinutes = (stop, mins) => act(async () => {
     const n = Number(mins);
@@ -217,7 +250,15 @@ export default function TripBuilder({ user }) {
     <div className="page" style={{ maxWidth: 1400 }}>
       <div className="page-head">
         <div>
-          <div className="eyebrow"><Link to="/trips" className="link">Road trips</Link> · {fmtDate(trip.start_date)}{trip.end_date ? ` – ${fmtDate(trip.end_date)}` : ''} ·{' '}
+          <div className="eyebrow"><Link to="/trips" className="link">Road trips</Link> ·{' '}
+            <button type="button" className="linklike" disabled={busy}
+              title="Move this trip to different dates"
+              onClick={() => {
+                setDates({ start: (trip.start_date || '').slice(0, 10), end: (trip.end_date || '').slice(0, 10) });
+                setDatesOpen((v) => !v);
+              }}>
+              {fmtDate(trip.start_date)}{trip.end_date ? ` – ${fmtDate(trip.end_date)}` : ''} ✎
+            </button> ·{' '}
             <button type="button" className="linklike" disabled={busy}
               title="Change what time the day starts and ends"
               onClick={() => {
@@ -256,6 +297,22 @@ export default function TripBuilder({ user }) {
           <button className="btn primary" disabled={busy || customerStops.length < 1} onClick={optimize}><IconRefresh />{busy ? 'Working…' : (trip.total_distance_m ? 'Rebuild route' : 'Build route')}</button>
         </div>
       </div>
+      {datesOpen && (
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 14, flexWrap: 'wrap' }}>
+          <span className="small muted">The trip runs from</span>
+          <input type="date" value={dates.start} disabled={busy}
+            onChange={(e) => onStartDate(e.target.value)} />
+          <span className="small muted">to</span>
+          <input type="date" value={dates.end} min={dates.start} disabled={busy}
+            onChange={(e) => setDates((d) => ({ ...d, end: e.target.value }))} />
+          <button className="btn sm primary" disabled={busy || !dates.start} onClick={applyDates}>Move trip</button>
+          <button className="btn sm" disabled={busy} onClick={() => setDatesOpen(false)}>Cancel</button>
+          <p className="small muted" style={{ flexBasis: '100%', margin: 0 }}>
+            Everything already planned moves with the dates — same stops, same order, same
+            times of day. Leave the end date empty for an open-ended trip.
+          </p>
+        </div>
+      )}
       {hoursOpen && (
         <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 14, flexWrap: 'wrap' }}>
           <span className="small muted">The day runs from</span>

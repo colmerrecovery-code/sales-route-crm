@@ -77,6 +77,53 @@ export async function update(ownerId, id, d) {
   return get(ownerId, id);
 }
 
+/**
+ * Move the whole trip to different dates.
+ *
+ * The day you planned is not always the day you drive. Changing the start date
+ * has to take the plan with it: stop times are absolute timestamps, so a trip
+ * dragged forward a week would otherwise keep last week's arrival times, and
+ * the "which day is today" arithmetic on the trip page would point at the wrong
+ * day of the trip.
+ *
+ * So the whole plan slides by the same number of days - same stops, same order,
+ * same times of day, new dates. Nothing is re-routed and nothing is re-timed,
+ * because nothing about the driving changed. Breaks are times of day, not
+ * timestamps, so they need no shifting.
+ *
+ * end_date left out keeps the trip the same length; passed in it is taken as
+ * given (null = open-ended).
+ */
+export async function setDates(ownerId, tripId, { start_date, end_date }) {
+  const iso = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
+  const plus = (day, n) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+  const r = await withTransaction(async (c) => {
+    const { rows: [trip] } = await c.query(
+      /* Read the dates as plain text: a DATE comes back as a JS Date at the
+         server's local midnight, which is one day out east of UTC. */
+      `SELECT to_char(start_date,'YYYY-MM-DD') AS start_date, to_char(end_date,'YYYY-MM-DD') AS end_date
+         FROM road_trips WHERE id=$1 AND owner_id=$2 FOR UPDATE`, [tripId, ownerId]);
+    if (!trip) return null;
+    const was = iso(trip.start_date);
+    const shift = Math.round((Date.parse(`${start_date}T00:00:00Z`) - Date.parse(`${was}T00:00:00Z`)) / 86400000);
+    const ends = end_date !== undefined ? end_date : (trip.end_date ? plus(iso(trip.end_date), shift) : null);
+    await c.query('UPDATE road_trips SET start_date=$2, end_date=$3 WHERE id=$1', [tripId, start_date, ends]);
+    let moved = 0;
+    if (shift !== 0) {
+      const { rowCount } = await c.query(
+        `UPDATE trip_stops
+            SET planned_arrival = planned_arrival + make_interval(days => $2::int),
+                planned_depart  = planned_depart  + make_interval(days => $2::int)
+          WHERE trip_id=$1 AND (planned_arrival IS NOT NULL OR planned_depart IS NOT NULL)`,
+        [tripId, shift]);
+      moved = rowCount;
+    }
+    return { shift, moved, was };
+  });
+  return r ? { ...r, trip: await get(ownerId, tripId) } : null;
+}
+
 export async function remove(ownerId, id) {
   const { rowCount } = await query('DELETE FROM road_trips WHERE owner_id=$1 AND id=$2', [ownerId, id]);
   return rowCount > 0;
