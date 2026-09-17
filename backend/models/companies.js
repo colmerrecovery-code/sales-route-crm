@@ -45,7 +45,16 @@ export function expandProvinces(csv) {
 const cols = `id, owner_id, company_code, name, address, city, postal_code, province, country, phone, website, notes,
   created_at, updated_at, tier, temperature, last_contact_at, last_purchase_at, next_touch_due, annual_value, lat, lng, inactive_365`;
 
-export async function list(ownerId, { tier, temperature, city, postal_code, province, provinces, q, near, radius_km, due, limit, offset, fields } = {}) {
+/* Sort orders a caller may ask for, by name rather than by SQL, so nothing
+   from a query string ever reaches the ORDER BY. "value" puts the accounts
+   worth the most first and leaves the unpriced ones at the bottom. */
+const ORDERS = {
+  name: 'name',
+  value: 'annual_value DESC NULLS LAST, name',
+  oldest_contact: 'last_contact_at ASC NULLS FIRST, name',
+};
+
+export async function list(ownerId, { tier, temperature, city, postal_code, province, provinces, q, near, radius_km, due, untouched, order, limit, offset, fields } = {}) {
   const where = ['owner_id = $1']; const params = [ownerId];
   const add = (sql, v) => { params.push(v); where.push(sql.replace('?', `$${params.length}`)); };
   if (tier) add('tier = ?', tier);
@@ -58,12 +67,19 @@ export async function list(ownerId, { tier, temperature, city, postal_code, prov
   if (postal_code) add("upper(replace(postal_code,' ','')) LIKE upper(replace(?,' ',''))||'%'", postal_code);
   if (q) { params.push(`%${q}%`); where.push(`(name ILIKE $${params.length} OR company_code ILIKE $${params.length})`); }
   if (due === 'true') where.push('next_touch_due <= CURRENT_DATE');
+  /* Never contacted at all.
+     These are invisible to the overdue list by design: "due" is last contact
+     plus a cycle, and with no last contact there is no cycle, so an account
+     nobody has ever called can never fall due. They are the ones most worth
+     seeing, which is why they get a filter of their own. */
+  if (untouched === 'true') where.push('last_contact_at IS NULL');
   if (near) {
     const [lat, lng] = near.split(',').map(Number);
     params.push(lng, lat, (Number(radius_km) || 25) * 1000);
     where.push(`ST_DWithin(location, ST_SetSRID(ST_MakePoint($${params.length - 2}, $${params.length - 1}),4326)::geography, $${params.length})`);
   }
   const whereSql = where.join(' AND ');
+  const orderSql = ORDERS[order] || ORDERS.name;
 
   // `fields=map` ships only what a pin needs, and only pinned companies —
   // a fraction of the payload when the map is all you're drawing.
@@ -76,7 +92,7 @@ export async function list(ownerId, { tier, temperature, city, postal_code, prov
   const n = Number(limit);
   if (!Number.isFinite(n) || n <= 0) {
     const { rows } = await query(
-      `SELECT ${select} FROM company_overview WHERE ${whereSql}${mapOnly} ORDER BY name`, params);
+      `SELECT ${select} FROM company_overview WHERE ${whereSql}${mapOnly} ORDER BY ${orderSql}`, params);
     return rows;
   }
 
@@ -84,7 +100,7 @@ export async function list(ownerId, { tier, temperature, city, postal_code, prov
   const take = Math.min(n, 200);
   const skip = Math.max(0, Number(offset) || 0);
   const [{ rows }, { rows: [count] }] = await Promise.all([
-    query(`SELECT ${select} FROM company_overview WHERE ${whereSql}${mapOnly} ORDER BY name LIMIT ${take} OFFSET ${skip}`, params),
+    query(`SELECT ${select} FROM company_overview WHERE ${whereSql}${mapOnly} ORDER BY ${orderSql} LIMIT ${take} OFFSET ${skip}`, params),
     query(`SELECT count(*)::int AS total FROM company_overview WHERE ${whereSql}${mapOnly}`, params),
   ]);
   return { rows, total: count.total, limit: take, offset: skip };

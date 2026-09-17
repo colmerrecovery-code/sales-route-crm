@@ -33,6 +33,7 @@ export default function Dashboard() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [logged, setLogged] = useState(null);
+  const [cold, setCold] = useState(null);      // { rows, total } never contacted
 
   /* Which trip, if any, is today's.
      Prefer one already under way, then the earliest that covers today. An
@@ -71,6 +72,7 @@ export default function Dashboard() {
     api.companyStats(inTerritory).then(setStats);
     api.companies({ ...inTerritory, due: 'true' }).then(setDue);
     api.companies({ ...inTerritory, tier: 'tier2' }).then(setLeads);
+    api.companiesPage({ ...inTerritory, untouched: 'true', order: 'value' }, 6, 0).then(setCold);
     loadTrips();
   }, []);
 
@@ -78,6 +80,10 @@ export default function Dashboard() {
     const inTerritory = { provinces: provinceParam('territory') };
     api.companyStats(inTerritory).then(setStats);
     api.companies({ ...inTerritory, due: 'true' }).then(setDue);
+    /* Biggest accounts first, and only the first handful: the count matters
+       more than the tail, and logging one touch moves an account off this list
+       and onto its visit cycle. */
+    api.companiesPage({ ...inTerritory, untouched: 'true', order: 'value' }, 6, 0).then(setCold);
   };
 
   /* The search list is the territory, fetched once on first use rather than on
@@ -109,6 +115,13 @@ export default function Dashboard() {
     } catch (e) {
       setLogged(`Couldn't log that: ${e.message}`);
     } finally { setSaving(false); }
+  };
+
+  /* From "who have I never called" straight into logging the call: the logger
+     is on this same page, so picking one fills it in and scrolls up to it. */
+  const logThis = (c) => {
+    setWho(c); setNote(''); setLogged(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   /* Ticking a stop off from here, rather than making him open the trip to do
@@ -306,6 +319,37 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* Never contacted.
+          The overdue tile can only ever count accounts that have a last-contact
+          date, so an account nobody has called is not "in good standing" - it is
+          unmeasured, and it never appears anywhere. This is that list. */}
+      {cold && cold.total > 0 && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="card-head">
+            <h2>No contact logged yet</h2>
+            <Link className="link" to="/customers?untouched=true">See all {cold.total} &rarr;</Link>
+          </div>
+          <p className="small muted" style={{ margin: '-6px 0 4px' }}>
+            {cold.total} account{cold.total === 1 ? '' : 's'} in your territory have no contact date, so they never
+            come up as due. Biggest first. Log one touch and it joins its visit cycle.
+          </p>
+          {cold.rows.map((c) => (
+            <div key={c.id} className="li-row" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Code>{c.company_code}</Code>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="name">{c.name}</div>
+                <div className="small muted">
+                  {c.city}
+                  {c.annual_value ? ` \u00b7 $${Number(c.annual_value).toLocaleString('en-CA')}/yr` : ''}
+                  {c.last_purchase_at ? ` \u00b7 last bought ${fmtDate(c.last_purchase_at)}` : ''}
+                </div>
+              </div>
+              <button className="btn sm" onClick={() => logThis(c)}><IconPhone />Log a touch</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

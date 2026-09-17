@@ -119,7 +119,7 @@ export default function Customers({ user, onUserChange }) {
   /* No ?prov in the URL means the territory, not the country. That default is
      the whole point: the list opens on the customers he can actually visit. */
   const prov = params.get('prov') || 'territory';
-  const filters = { tier: params.get('tier') || '', temperature: params.get('temperature') || '', city: params.get('city') || '', postal_code: params.get('postal_code') || '', q: params.get('q') || '', due: params.get('due') || '', provinces: provinceParam(prov) };
+  const filters = { tier: params.get('tier') || '', temperature: params.get('temperature') || '', city: params.get('city') || '', postal_code: params.get('postal_code') || '', q: params.get('q') || '', due: params.get('due') || '', untouched: params.get('untouched') || '', provinces: provinceParam(prov) };
 
   /* Load one page at a time. Drawing all 956 at once locked the phone up for
      several seconds; 50 renders instantly and most searches never need more. */
@@ -157,7 +157,22 @@ export default function Customers({ user, onUserChange }) {
         <select value={filters.temperature} onChange={(e) => setFilter('temperature', e.target.value)}>
           <option value="">Any temperature</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option>
         </select>
-        <select value={filters.due} onChange={(e) => setFilter('due', e.target.value)}><option value="">Any status</option><option value="true">Overdue only</option></select>
+        {/* One status question, three answers -- overdue and never-contacted are
+            mutually exclusive, so they share a control rather than sitting as
+            two filters that can be set to contradict each other. */}
+        <select
+          value={filters.due === 'true' ? 'due' : filters.untouched === 'true' ? 'untouched' : ''}
+          onChange={(e) => {
+            const p = new URLSearchParams(params);
+            p.delete('due'); p.delete('untouched'); p.delete('open');
+            if (e.target.value === 'due') p.set('due', 'true');
+            if (e.target.value === 'untouched') p.set('untouched', 'true');
+            setParams(p);
+          }}>
+          <option value="">Any status</option>
+          <option value="due">Overdue only</option>
+          <option value="untouched">Never contacted</option>
+        </select>
         <select value={prov} onChange={(e) => setFilter('prov', e.target.value)} title="Which provinces to show">
           <option value="territory">My territory</option>
           <option value="all">All provinces</option>
