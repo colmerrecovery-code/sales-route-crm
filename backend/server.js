@@ -8,6 +8,8 @@ import morgan from 'morgan';
 import authRoutes from './routes/auth.js';
 import companyRoutes from './routes/companies.js';
 import tripRoutes from './routes/trips.js';
+import surveyRoutes from './routes/survey.js';
+import { fileURLToPath } from 'node:url';
 import { requireAuth } from './middleware/auth.js';
 import { notFound, errorHandler } from './middleware/errors.js';
 import { pool } from './config/db.js';
@@ -46,6 +48,14 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', requireAuth, companyRoutes);
 app.use('/api/trips', requireAuth, tripRoutes);
+// Public survey: submitting needs no account; reading the answers does.
+app.use('/api/survey', surveyRoutes);
+
+/* The survey pages are plain files, not part of the React app, so a salesperson
+   opening the link never meets GoMichi's sign-in screen. Served before the
+   front end's catch-all, which would otherwise answer /survey with the app. */
+const SURVEY = fileURLToPath(new URL('./public/survey', import.meta.url));
+app.use('/survey', express.static(SURVEY));
 
 /* In production the API also serves the built front end, so the whole app lives
    at one address. That removes the cross-origin setup entirely and gives a
