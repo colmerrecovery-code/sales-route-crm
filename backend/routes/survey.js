@@ -49,7 +49,46 @@ const submitSchema = z.object({
   }),
 });
 
+/* The anonymous LinkedIn poll at /poll. No name, email or phone is asked for,
+   and nothing identifying is stored with the answers. */
+const POLL = 'road-poll-v1';
+const pollSchema = z.object({
+  client_id: z.string().min(8).max(64),
+  answers: z.object({
+    rank: z.array(z.number().int().min(0).max(6)).min(3).max(7)
+      .refine(a => new Set(a).size === a.length, 'Each tool can only be ranked once'),
+    role: pick(4), book: pick(4), admin: pick(4), notes: pick(5), route: pick(5), slip: pick(4),
+    spent: pick(2), price: pick(5), co: pick(4),
+    pain: z.string().max(500).optional(),
+  }),
+});
+
 const r = Router();
+
+r.post('/poll', rateLimit, validate(pollSchema), async (req, res) => {
+  const { client_id, answers } = req.body;
+  await query(
+    `INSERT INTO survey_responses (survey, client_id, answers) VALUES ($1, $2, $3)
+     ON CONFLICT (client_id) DO UPDATE SET answers = EXCLUDED.answers`,
+    [POLL, client_id, answers]);
+  res.status(201).json({ ok: true });
+});
+
+/* What everyone sees after voting: how the crowd ranked the tools so far.
+   Counts only, never anyone's typed answer. */
+r.get('/poll/summary', async (_req, res) => {
+  const { rows } = await query(`SELECT answers->'rank' AS rank FROM survey_responses WHERE survey = $1`, [POLL]);
+  const points = Array(7).fill(0);
+  for (const { rank } of rows) (rank || []).forEach((k, i) => { if (k >= 0 && k < 7) points[k] += 7 - i; });
+  res.json({ n: rows.length, points });
+});
+
+r.get('/poll/responses', requireAuth, async (req, res) => {
+  if (!isOwner(req.user.email)) return res.status(403).json({ error: 'Only the poll owner can see the answers.' });
+  const { rows } = await query(
+    `SELECT id, answers, created_at FROM survey_responses WHERE survey = $1 ORDER BY created_at DESC LIMIT 5000`, [POLL]);
+  res.json(rows);
+});
 
 r.post('/', rateLimit, validate(submitSchema), async (req, res) => {
   const { client_id, answers } = req.body;

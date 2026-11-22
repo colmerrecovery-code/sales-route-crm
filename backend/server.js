@@ -56,6 +56,8 @@ app.use('/api/survey', surveyRoutes);
    front end's catch-all, which would otherwise answer /survey with the app. */
 const SURVEY = fileURLToPath(new URL('./public/survey', import.meta.url));
 app.use('/survey', express.static(SURVEY));
+const POLL = fileURLToPath(new URL('./public/poll', import.meta.url));
+app.use('/poll', express.static(POLL));
 
 /* In production the API also serves the built front end, so the whole app lives
    at one address. That removes the cross-origin setup entirely and gives a
